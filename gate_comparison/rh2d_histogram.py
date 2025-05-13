@@ -58,7 +58,7 @@ ax.legend()
 
 # %%
 es_liq = svp.liq_analytic
-es_ice = svp.liq_analytic
+es_ice = svp.ice_analytic
 es = mt.make_es_mxd(es_liq=svp.liq_analytic, es_ice=svp.ice_analytic)
 Rd = constants.Rd
 Rv = constants.Rv
@@ -137,5 +137,6 @@ for ax in axes:
         ta,
         color="black",
     )
+ax.axvline(0.95)
 ph.plot_cbar(fig, p, ax, "count / total", "1")
 sns.despine(offset={"bottom": 10})
