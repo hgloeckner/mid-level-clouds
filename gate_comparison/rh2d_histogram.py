@@ -35,7 +35,6 @@ unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
 gate = gate.where(gate.launch_lon > -40, drop=True)
 
-# %%
 
 # %%
 fig, ax = plt.subplots(figsize=(6, 6))
