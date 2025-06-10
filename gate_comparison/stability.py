@@ -105,14 +105,61 @@ for dataname, data in datasets.items():
     )
 
 # %%
+data = datasets["radiosonde"]
+mean_t = data.ta.mean("sonde_id").sel(altitude=slice(0, 14000))
+mean_q = data.q.mean("sonde_id").sel(altitude=slice(0, 14000))
+mean_p = data.p.mean("sonde_id").sel(altitude=slice(0, 14000))
+
+theta_e_bolton = mt.theta_e_bolton(
+    T=mean_t,
+    P=mean_p,
+    qt=mean_q,
+    es=svp.liq_analytic,
+)
+# %%
+temp = []
+for alt in mean_p.altitude.values:
+    temp.append(
+        mt.invert_for_temperature(
+            f=mt.theta_e_bolton,
+            f_val=theta_e_bolton.sel(altitude=0).values,
+            P=mean_p.sel(altitude=alt).values,
+            qt=mean_q.sel(altitude=0).values,
+            es=svp.liq_analytic,
+        )
+    )
+
+theta = mt.theta(T=temp, P=mean_p, qv=mean_q)
+stab = get_n2(theta, mean_q, altdim="altitude")
 # %%
 sns.set_palette("colorblind")
 fig, ax = plt.subplots(figsize=(6, 5), sharey=True)
 
 for dataname, data in datasets.items():
+    """
     data.stability.mean("sonde_id").plot(
         label=dataname,
         y="altitude",
     )
+    """
+    ax.plot(
+        data.stability.mean("sonde_id").sel(altitude=slice(0, 14000)).values,
+        data.ta.mean("sonde_id").sel(altitude=slice(0, 14000)).values,
+        label=dataname,
+    )
+ax.plot(
+    stab.rolling(altitude=15).mean(),
+    temp,
+    label="pseudo",
+    color="black",
+)
+
 ax.legend()
-ax.set_ylim(0, 14000)
+ax.invert_yaxis()
+ax.set_ylim(300, 220)
+ax.set_xlim(0, 0.02)
+ax.axhline(273.15, color="k", linestyle="-", lw=0.5)
+sns.despine(offset={"bottom": 10})
+# %%
+
+# %%
