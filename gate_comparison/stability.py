@@ -21,7 +21,7 @@ radios = opends.open_radiosondes(
 drops = opends.open_dropsondes(
     "bafybeicb33v6ohezyhgq5rumq4g7ejnfqxzcpuzd4i2fxnlos5d7ebmi3m"
 )
-gate = opends.open_gate("QmWmYbYbW51bpYGREctj1LLWSMrPc7sEXkgDzhsDYsW3qg")
+gate = opends.open_gate("QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A")
 
 unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
