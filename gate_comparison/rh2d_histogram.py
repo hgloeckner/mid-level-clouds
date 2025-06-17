@@ -138,6 +138,5 @@ for ax in axes:
         ta,
         color="black",
     )
-ax.axvline(0.95)
 ph.plot_cbar(fig, p, ax, "count / total", "1")
 sns.despine(offset={"bottom": 10})
