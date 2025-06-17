@@ -156,8 +156,8 @@ ax.plot(
 
 ax.legend()
 ax.invert_yaxis()
-ax.set_ylim(300, 220)
-ax.set_xlim(0, 0.02)
+ax.set_ylim(295, 220)
+ax.set_xlim(0.005, 0.017)
 ax.axhline(273.15, color="k", linestyle="-", lw=0.5)
 sns.despine(offset={"bottom": 10})
 # %%
