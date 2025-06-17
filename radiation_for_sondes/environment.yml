@@ -1,0 +1,43 @@
+name: radiation
+channels:
+  - conda-forge
+  - rttools
+dependencies:
+  - python=3.12
+  - aiohttp
+  - bottleneck
+  - ca-certificates
+  - cartopy
+  - cmocean
+  - certifi
+  - dask
+  - fsspec
+  - flox
+  - intake<2
+  - intake-xarray<2
+  - ipykernel
+  - ipython
+  - healpix
+  - matplotlib
+  - myst-parser
+  - numpy
+  - nbsphinx
+  - netcdf4
+  - openssl
+  - pandas
+  - pre-commit
+  - pyarts
+  - pytest
+  - requests
+  - seaborn
+  - sphinx
+  - sphinx-autobuild
+  - xarray
+  - zarr<3.0.0
+  - pip
+  - pip:
+    - easygems
+    - eurec4a
+    - ipfsspec>=0.5.3
+    - moist_thermodynamics
+    - orcestra
