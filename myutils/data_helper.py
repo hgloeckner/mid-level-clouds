@@ -26,25 +26,10 @@ def get_segments(
     var,
     varmin,
 ):
-    empty_value = xr.Dataset(
-        data_vars={
-            var: (("sonde_id", "altitude"), np.full((len(ds.sonde_id), 1), 0)),
-            "ta": (("sonde_id", "altitude"), np.full((len(ds.sonde_id), 1), 0)),
-        },
-        coords={
-            "sonde_id": ds.sonde_id,
-            "altitude": [-1],
-        },
-    )
-
     interpolated_ds = (
-        xr.concat(
-            [
-                empty_value,
-                ds[[var, "ta"]].interpolate_na(dim="altitude"),
-            ],
-            dim="altitude",
-        )
+        ds[[var, "ta"]]
+        .where((ds.altitude > ds.altitude.min()) & (ds.altitude < ds.altitude.max()))
+        .interpolate_na(dim="altitude")
         .fillna(0)
         .load()
     )
@@ -71,7 +56,8 @@ def get_segments(
             sonde_id=sonde,
             altitude=ends.sel(sonde_id=sonde).dropna(dim="altitude").altitude,
         )
-        lengths = start.values - end.values
+
+        lengths = end.altitude.values - start.altitude.values
         segments[str(sonde.values)] = (
             np.array(lengths),
             start.values,
