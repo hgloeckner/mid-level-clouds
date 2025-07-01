@@ -61,3 +61,6 @@ def open_gate(cid):
         .set_coords(["launch_lat", "launch_lon"])
         .swap_dims({"sonde_time": "sonde_id"})
     )
+
+def get_cid():
+    return "QmP73Kosem4exJcZXxG8vpN4YLqaepoZSPWwnQ9N1xffus"
