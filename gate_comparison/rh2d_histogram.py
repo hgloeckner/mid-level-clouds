@@ -14,8 +14,6 @@ sys.path.append("../")
 import myutils.open_datasets as opends  # noqa
 import myutils.plot_helper as ph  # noqa
 
-# %%
-es = mt.make_es_mxd(es_liq=svp.liq_analytic, es_ice=svp.ice_analytic)
 
 # %%
 rs = opends.open_radiosondes(
@@ -29,7 +27,7 @@ ds = opends.open_dropsondes(
 )
 # ds = ds.where(ds.launch_lon > -40, drop=True)
 
-gate = opends.open_gate("QmWmYbYbW51bpYGREctj1LLWSMrPc7sEXkgDzhsDYsW3qg")
+gate = opends.open_gate("QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A")
 
 unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
