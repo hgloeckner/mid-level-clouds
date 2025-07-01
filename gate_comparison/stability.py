@@ -136,12 +136,10 @@ sns.set_palette("colorblind")
 fig, ax = plt.subplots(figsize=(6, 5), sharey=True)
 
 for dataname, data in datasets.items():
-    """
-    data.stability.mean("sonde_id").plot(
-        label=dataname,
-        y="altitude",
-    )
-    """
+    # data.stability.mean("sonde_id").plot(
+    #     label=dataname,
+    #     y="altitude",
+    # )
     ax.plot(
         data.stability.mean("sonde_id").sel(altitude=slice(0, 14000)).values,
         data.ta.mean("sonde_id").sel(altitude=slice(0, 14000)).values,
