@@ -14,28 +14,25 @@ sys.path.append("../")
 import myutils.open_datasets as opends  # noqa
 import myutils.plot_helper as ph  # noqa
 
-# %%
-es = mt.make_es_mxd(es_liq=svp.liq_analytic, es_ice=svp.ice_analytic)
 
 # %%
 rs = opends.open_radiosondes(
     "bafybeigensqyqxfyaxgyjhwn6ytdpi3i4sxbtffd4oc27zbimyro4hygjq"
 )
-rs = rs.where(rs.launch_lon > -40, drop=True)
+# rs = rs.where(rs.launch_lon > -40, drop=True)
 
 
 ds = opends.open_dropsondes(
     "bafybeicb33v6ohezyhgq5rumq4g7ejnfqxzcpuzd4i2fxnlos5d7ebmi3m"
 )
-ds = ds.where(ds.launch_lon > -40, drop=True)
+# ds = ds.where(ds.launch_lon > -40, drop=True)
 
-gate = opends.open_gate("QmWmYbYbW51bpYGREctj1LLWSMrPc7sEXkgDzhsDYsW3qg")
+gate = opends.open_gate("QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A")
 
 unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
 gate = gate.where(gate.launch_lon > -40, drop=True)
 
-# %%
 
 # %%
 fig, ax = plt.subplots(figsize=(6, 6))
@@ -59,7 +56,7 @@ ax.legend()
 
 # %%
 es_liq = svp.liq_analytic
-es_ice = svp.liq_analytic
+es_ice = svp.ice_analytic
 es = mt.make_es_mxd(es_liq=svp.liq_analytic, es_ice=svp.ice_analytic)
 Rd = constants.Rd
 Rv = constants.Rv
@@ -109,26 +106,29 @@ orcestra_total = xr.concat(
 )
 
 
-fig, axes = plt.subplots(ncols=2, figsize=(15, 6))
+fig, axes = plt.subplots(ncols=2, figsize=(10, 4))
 for data, ax, label, rh_ice in zip(
-    [orcestra_total.where(orcestra_total.launch_lon > -40, drop=True), gate],
+    [orcestra_total, gate],  # .where(orcestra_total.launch_lon > -40, drop=True)
     axes,
-    ["orcestra (east)", "gate"],
-    [p_rap, p_beach, p_gate],
+    ["orcestra", "gate"],
+    [p_rap, p_gate],
 ):
     hist = histogram(
         data.ta.sel(altitude=slice(0, 14000)),
         data.rh.sel(altitude=slice(0, 14000)),
-        bins=[np.linspace(220, 305, 200), np.linspace(0, 1.1, 200)],
+        bins=[np.linspace(220, 300, 100), np.linspace(0, 1.1, 100)],
     )
-    hist = hist / hist.sum(dim=["ta_bin", "rh_bin"])
+    hist = hist / hist.sum(dim=["rh_bin"])
     p = hist.plot(
         ax=ax,
         cmap="Blues",
-        vmax=0.00008,
+        vmax=0.04,
         add_colorbar=False,
     )
 
+    ((hist * hist.rh_bin).sum(dim="rh_bin") / (hist.sum(dim="rh_bin"))).plot(
+        y="ta_bin", color="#0052A9", ax=ax
+    )
     ax.invert_yaxis()
     ax.set_title(label)
     ax.axhline(273.15, color="k", linestyle="--")
