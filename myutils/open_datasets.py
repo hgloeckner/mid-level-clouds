@@ -63,5 +63,38 @@ def open_gate(cid):
     )
 
 
+def open_wales(masked=True):
+    if masked:
+        wv_path = "/work/mh0066/m301046/wales/wales_wv_masked.zarr"
+        no_wv_path = "/work/mh0066/m301046/wales/wales_no_wv_masked.zarr"
+    else:
+        wv_path = "/work/mh0066/m301046/wales/wales_wv.zarr"
+        no_wv_path = "/work/mh0066/m301046/wales/wales_no_wv.zarr"
+
+    wv = xr.open_dataset(
+        wv_path,
+        engine="zarr",
+        chunks={},
+    )
+    no_wv = xr.open_dataset(
+        no_wv_path,
+        engine="zarr",
+        chunks={},
+    )
+    return wv.rename(
+        {
+            "airtemperature": "ta",
+            "flight_altitude": "aircraft_msl_altitude",
+            "airdensity": "rho_air",
+        }
+    ), no_wv.rename(
+        {
+            "airtemperature": "ta",
+            "flight_altitude": "aircraft_msl_altitude",
+            "airdensity": "rho_air",
+        }
+    )
+
+
 def get_cid():
     return "QmP73Kosem4exJcZXxG8vpN4YLqaepoZSPWwnQ9N1xffus"
