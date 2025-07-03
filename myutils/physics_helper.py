@@ -37,3 +37,15 @@ def calc_Tv(T, mr):
     """
     eps = constants.eps1  # kg / kg
     return T * (1 + mr / eps) / (1 + mr)
+
+
+def wv2q(wv):
+    """
+    get specific humidity from wales
+    """
+    m_l = constants.atomic_mass_dry_air  # g/mol
+    m_w = constants.m_h2o  # g/mol water vapour molar mass
+    C1 = m_w / m_l
+    C2 = 1 - C1
+    rho_w = wv.wv
+    return C1 * rho_w / (wv.rho_air - C2 * rho_w)
