@@ -9,9 +9,8 @@ from pydropsonde.helper.xarray_helper import write_ds
 
 ipfs_gateway = "https://ipfs.io"
 ipfs_hash = "bafybeicb33v6ohezyhgq5rumq4g7ejnfqxzcpuzd4i2fxnlos5d7ebmi3m"
-pressure_levels = 16
-sonde_alt = 15e3  # 15 km
-
+strato_step = 1000
+tropo_step = 100
 # %%
 
 pyarts.data.download()
@@ -37,7 +36,20 @@ vmr = xr.apply_ufunc(
 )
 clean_data = interpolated_data.assign(vmr=vmr).sortby("altitude")
 
+
 # %%
+def create_fictional_ds(atm_dict, sonde_id):
+    return xr.Dataset(
+        data_vars={
+            var: (("altitude",), atm_dict[var]) for var in ["t", "p", "H2O", "O3"]
+        },
+        coords={
+            "sonde_id": (("sonde",), [sonde_id]),
+            "altitude": (("altitude",), atm_dict["altitude"]),
+        },
+    )
+
+
 start_time = time.time()
 atmospheres = []
 for sonde in clean_data.sonde.values:
@@ -45,46 +57,65 @@ for sonde in clean_data.sonde.values:
 
     sfc_temp = ds.ta.isel(altitude=0).values
     flux_strato = pyarts.recipe.AtmosphericFlux(
-        surface_temperature=sfc_temp, max_level_step=1000.0
+        surface_temperature=sfc_temp, max_level_step=strato_step
     )
     flux_tropos = pyarts.recipe.AtmosphericFlux(
-        surface_temperature=sfc_temp, max_level_step=200.0
+        surface_temperature=sfc_temp, max_level_step=tropo_step
     )
     strato_atm = flux_strato.get_atmosphere()
-    tropos_atm = flux_tropos.get_atmosphere()
-
-    new_atm = {}
-    for variable in tropos_atm.keys():
-        new_atm[variable] = np.concat(
-            [strato_atm[variable][:36], tropos_atm[variable][-70:]]
-        )
-
-    new_atm["t"][-70:] = ds.ta.sortby("altitude", ascending=False).values[-1400::20]
-    new_atm["p"][-70:] = ds.p.sortby("altitude", ascending=False).values[-1400::20]
-    new_atm["H2O"][-70:] = ds.vmr.sortby("altitude", ascending=False).values[-1400::20]
-    new_atm["CO2"][:] = 0.00042  # 420 ppm
-
-    atmospheres.append(
-        xr.Dataset(
-            data_vars={var: (("altitude",), new_atm[var]) for var in new_atm.keys()},
-            coords={
-                "sonde_id": (("sonde",), [str(ds.sonde_id.values)]),
-            },
-        )
+    strato_atm["altitude"] = np.arange(0, 50000 + strato_step, strato_step)[::-1] + (
+        strato_step // 2
     )
+    tropos_atm = flux_tropos.get_atmosphere()
+    tropos_atm["altitude"] = np.arange(0, 50000 + tropo_step, tropo_step)[::-1] + (
+        tropo_step // 2
+    )
+
+    tropos_ds = create_fictional_ds(tropos_atm, str(ds.sonde_id.values)).sortby(
+        "altitude"
+    )
+    strato_ds = create_fictional_ds(strato_atm, str(ds.sonde_id.values)).sortby(
+        "altitude"
+    )
+    new_atm = xr.concat(
+        [
+            tropos_ds.sel(altitude=slice(None, 20000)),
+            strato_ds.sel(altitude=slice(20000, None)),
+        ],
+        dim="altitude",
+    )
+    atmospheres.append(new_atm)
     elapsed = time.time() - start_time
     remaining = elapsed / (sonde + 1) * (clean_data.sonde.size - sonde - 1)
     print(
         f"{sonde + 1}/{clean_data.sonde.size} complete | ETA: {remaining:.1f}s (~{remaining / 60:.1f} min)"
     )
+ds = xr.concat(atmospheres, dim="sonde").assign(
+    CO2=(("altitude",), np.full_like(atmospheres[0].altitude, 420e-6, dtype="float32")),
+    O2=(("altitude",), np.full_like(atmospheres[0].altitude, 0.209, dtype="float32")),
+    N2=(("altitude",), np.full_like(atmospheres[0].altitude, 0.781, dtype="float32")),
+    O3=(("altitude",), atmospheres[0].O3.values),
+)
+# %%
+from pydropsonde.helper.xarray_helper import write_ds
+
+write_ds(
+    ds,
+    dir="/work/mh0066/m301046/ml_clouds/",
+    filename="idealized_atmospheres.nc",
+    object_dims=("sonde",),
+    alt_dim="altitude",
+)
 
 # %%
 
+arts3 = xr.open_dataset("/work/mh0066/m301046/ml_clouds/idealized_atmospheres.nc")
+# %%
 
 output_path = "idealized_atmospheres.zarr"
 write_ds(
     xr.concat(atmospheres, dim="sonde").interpolate_na(dim="altitude", method="akima"),
-    dir=".",
+    dir="/work/mh0066/m301046/ml_clouds/",
     filename=output_path,
     object_dims=("sonde",),
     alt_dim="altitude",
