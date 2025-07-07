@@ -97,4 +97,4 @@ def open_wales(masked=True):
 
 
 def get_cid():
-    return "QmP73Kosem4exJcZXxG8vpN4YLqaepoZSPWwnQ9N1xffus"
+    return "QmcAtU5Exu5z6xyPrQq3jm6jzG7aquHJPNMcew4MKAYNYQ"
