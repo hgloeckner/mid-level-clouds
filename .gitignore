@@ -2,6 +2,7 @@
 *.jpg
 *.jpeg
 *.pdf
+*.zarr
 
 __pycache__/
 *.py[cod]
@@ -39,3 +40,4 @@ sandbox/*
 _version.py
 **/*.log
 **/*.doc*
+**/cache/
