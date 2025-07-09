@@ -96,5 +96,18 @@ def open_wales(masked=True):
     )
 
 
+def open_radiative_fluxes():
+    ds = (
+        xr.open_dataset(
+            "/work/mh0066/m301046/ml_clouds/arts2_fluxes.zarr",
+            engine="zarr",
+            chunks={},
+        )
+        .swap_dims({"sonde": "sonde_id"})
+        .rename({"t": "ta"})
+    )
+    return ds.assign(cooling_rate=-ds.heating_rate)
+
+
 def get_cid():
     return "QmcAtU5Exu5z6xyPrQq3jm6jzG7aquHJPNMcew4MKAYNYQ"
