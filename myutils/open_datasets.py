@@ -5,7 +5,7 @@ import hashlib
 
 def open_dropsondes(cid):
     ds = xr.open_dataset(f"ipfs://{cid}", engine="zarr")
-    return (
+    ds = (
         ds.rename(
             {
                 "aircraft_latitude": "launch_lat",
@@ -15,6 +15,10 @@ def open_dropsondes(cid):
         .reset_coords(["aircraft_msl_altitude"])
         .swap_dims({"sonde": "sonde_id"})
     )
+    try:
+        return ds.swap_dims({"circle": "circle_id"})
+    except ValueError:
+        return ds
 
 
 def open_radiosondes(cid):

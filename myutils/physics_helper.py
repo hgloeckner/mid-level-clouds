@@ -39,6 +39,28 @@ def calc_Tv(T, mr):
     return T * (1 + mr / eps) / (1 + mr)
 
 
+def get_stability(theta, T):
+    return (T / theta * theta.differentiate("altitude")) * 1000
+
+
+def get_csc_stab(rho, stability, H):
+    grad_stability = stability.differentiate("altitude") * 1000
+    cp = constants.cpv
+    return 1 / (cp * rho * stability) * (H / stability * grad_stability)
+
+
+def get_csc_cooling(rho, stability, H):
+    grad_H = H.differentiate("altitude") * 1000
+    cp = constants.cpv
+    return -1 / (cp * rho * stability) * grad_H
+
+
+def density_from_q(p, T, q):
+    Rd = constants.dry_air_gas_constant
+    Rv = constants.water_vapor_gas_constant
+    return p / ((Rd + (Rv - Rd) * q) * T)
+
+
 def wv2q(wv):
     """
     get specific humidity from wales
