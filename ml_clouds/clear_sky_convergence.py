@@ -1,5 +1,4 @@
 # %%
-from xhistogram.xarray import histogram
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -9,6 +8,13 @@ import sys
 sys.path.append("../")
 from myutils.constants_and_values import ml_sondes, cs_sondes
 import myutils.open_datasets as open_datasets
+from myutils.data_helper import get_hist_of_ta
+from myutils.physics_helper import (
+    get_stability,
+    density_from_q,
+    get_csc_stab,
+    get_csc_cooling,
+)
 
 # %%
 flux_data_arts2 = open_datasets.open_radiative_fluxes()
@@ -17,29 +23,6 @@ cid = open_datasets.get_cid()
 lvl3 = open_datasets.open_dropsondes(f"{cid}/dropsondes/Level_3/PERCUSION_Level_3.zarr")
 
 lvl3 = lvl3.where((lvl3.p_qc == 0) & (lvl3.ta_qc == 0) & (lvl3.rh_qc == 0), drop=True)
-
-
-# %%
-def get_stability(theta, T):
-    return (T / theta * theta.differentiate("altitude")) * 1000
-
-
-def get_csc_stab(rho, stability, H):
-    grad_stability = stability.differentiate("altitude") * 1000
-    cp = constants.cpv
-    return 1 / (cp * rho * stability) * (H / stability * grad_stability)
-
-
-def get_csc_cooling(rho, stability, H):
-    grad_H = H.differentiate("altitude") * 1000
-    cp = constants.cpv
-    return -1 / (cp * rho * stability) * grad_H
-
-
-def density_from_q(p, T, q):
-    Rd = constants.dry_air_gas_constant
-    Rv = constants.water_vapor_gas_constant
-    return p / ((Rd + (Rv - Rd) * q) * T)
 
 
 # %%
@@ -98,14 +81,6 @@ t["altitude"] = t["altitude"] + 5
 
 
 # %%
-def get_hist_of_ta(da_t, da_var, bins_var, bins_ta=np.linspace(240, 305, 200)):
-    bin_name = da_var.name + "_bin"
-    hist = histogram(da_t, da_var, bins=[bins_ta, bins_var], dim=["altitude"]).compute()
-    return (
-        ((hist * hist[bin_name]).sum(dim=bin_name) / hist.sum(bin_name))
-        .interpolate_na(dim="ta_bin")
-        .rename(ta_bin="ta")
-    )
 
 
 histds = flux_data_arts2.sel(altitude=slice(0, 12000))
