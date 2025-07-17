@@ -100,10 +100,12 @@ def open_wales(masked=True):
     )
 
 
-def open_radiative_fluxes():
+def open_radiative_fluxes(path=None):
+    if path is None:
+        path = "/work/mh0066/m301046/ml_clouds/arts2_fluxes.zarr"
     ds = (
         xr.open_dataset(
-            "/work/mh0066/m301046/ml_clouds/arts2_fluxes.zarr",
+            path,
             engine="zarr",
             chunks={},
         )
