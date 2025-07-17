@@ -28,14 +28,13 @@ def open_radiosondes(cid):
         ds.rename(
             {
                 "alt": "altitude",
-                "launch_time": "sonde_time",
                 "sounding": "sonde_id",
                 "flight_time": "bin_average_time",
                 "platform": "platform_id",
             }
         )
         .reset_coords(["p", "flight_lat", "flight_lon", "bin_average_time"])
-        .swap_dims({"sonde_time": "sonde_id"})
+        .swap_dims({"launch_time": "sonde_id"})
     )
 
 
@@ -60,11 +59,11 @@ def open_gate(cid):
                 "ua": "u",
                 "va": "v",
                 "platforms": "platform_id",
-                "time": "sonde_time",
+                "time": "launch_time",
             }
         )
         .set_coords(["launch_lat", "launch_lon"])
-        .swap_dims({"sonde_time": "sonde_id"})
+        .swap_dims({"launch_time": "sonde_id"})
     )
 
 
@@ -126,4 +125,4 @@ def open_reanalysis(chunks=None, **kwargs):
 
 
 def get_cid():
-    return "QmcAtU5Exu5z6xyPrQq3jm6jzG7aquHJPNMcew4MKAYNYQ"
+    return "QmPNVTb5fcN59XUi2dtUZknPx5HNnknBC2x4n7dtxuLdwi"
