@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import xarray as xr
-from xhistogram.xarray import histogram
 import moist_thermodynamics.functions as mt
 from moist_thermodynamics import saturation_vapor_pressures as svp
 
@@ -13,27 +12,163 @@ import sys
 sys.path.append("../")
 import myutils.open_datasets as opends  # noqa
 import myutils.plot_helper as ph  # noqa
-
+from myutils.data_helper import get_hist_of_ta, get_hist_of_ta_2d
 
 # %%
-rs = opends.open_radiosondes(
-    "bafybeigensqyqxfyaxgyjhwn6ytdpi3i4sxbtffd4oc27zbimyro4hygjq"
-)
-# rs = rs.where(rs.launch_lon > -40, drop=True)
+cid = opends.get_cid()
+rs = opends.open_radiosondes(f"{cid}/Radiosondes/RAPSODI_RS_ORCESTRA_level2.zarr")
 
 
-ds = opends.open_dropsondes(
-    "bafybeicb33v6ohezyhgq5rumq4g7ejnfqxzcpuzd4i2fxnlos5d7ebmi3m"
-)
-# ds = ds.where(ds.launch_lon > -40, drop=True)
+ds = opends.open_dropsondes(f"{cid}/HALO/dropsondes/Level_3/PERCUSION_Level_3.zarr")
 
 gate = opends.open_gate("QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A")
 
 unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
-gate = gate.where(gate.launch_lon > -40, drop=True)
+# %%
+
+lats = [5, 12]
+lons = [-27, -20]
+orcestra_gate = xr.concat(
+    [
+        rs.where(
+            (lons[0] < rs.launch_lon)
+            & (rs.launch_lon < lons[1])
+            & (lats[0] < rs.launch_lat)
+            & (rs.launch_lat < lats[1])
+            & (rs.ascent_flag == 0),
+            drop=True,
+        ),
+        ds.where(
+            (lons[0] < ds.launch_lon)
+            & (ds.launch_lon < lons[1])
+            & (lats[0] < ds.launch_lat)
+            & (ds.launch_lat < lats[1]),
+            drop=True,
+        ),
+    ],
+    dim="sonde_id",
+)
+gate_region = gate.where(
+    (lons[0] < gate.launch_lon)
+    & (gate.launch_lon < lons[1])
+    & (lats[0] < gate.launch_lat)
+    & (gate.launch_lat < lats[1]),
+    drop=True,
+)
+# %%
+orcestra_ta = get_hist_of_ta(
+    orcestra_gate.ta.sel(altitude=slice(0, 14000)),
+    orcestra_gate.rh.sel(altitude=slice(0, 14000)),
+    bins_var=np.linspace(0, 1.1, 100),
+    bins_ta=np.linspace(220, 305, 200),
+)
+gate_ta = get_hist_of_ta(
+    gate_region.ta.sel(altitude=slice(0, 14000)),
+    gate_region.rh.sel(altitude=slice(0, 14000)),
+    bins_var=np.linspace(0, 1.1, 100),
+    bins_ta=np.linspace(220, 305, 200),
+)
+# %%
+
+orcestra_2dhist = get_hist_of_ta_2d(
+    orcestra_gate.ta.sel(altitude=slice(0, 14000)),
+    orcestra_gate.rh.sel(altitude=slice(0, 14000)),
+    bins_var=np.linspace(0, 1.1, 100),
+    bins_ta=np.linspace(220, 305, 200),
+)
+gate_2dhist = get_hist_of_ta_2d(
+    gate_region.ta.sel(altitude=slice(0, 14000)),
+    gate_region.rh.sel(altitude=slice(0, 14000)),
+    bins_var=np.linspace(0, 1.1, 100),
+    bins_ta=np.linspace(220, 305, 200),
+)
+# %%
+(orcestra_2dhist / orcestra_2dhist.sum("rh_bin")).plot(
+    vmax=0.05, cmap="Blues", alpha=0.5
+)
+(gate_2dhist / gate_2dhist.sum("rh_bin")).plot(vmax=0.05, cmap="Reds", alpha=0.5)
+# %%
+cs_threshold = 0.95
+fig, axes = plt.subplots(ncols=2, figsize=(10, 5))
+ax = axes[0]
+orcestra_ta.mean("sonde_id").rolling(ta=5).mean().plot(
+    label="ORCESTRA", y="ta", color="blue", ax=ax
+)
+gate_ta.mean("sonde_id").rolling(ta=5).mean().plot(
+    label="GATE", y="ta", color="red", ax=ax
+)
 
 
+(orcestra_2dhist / orcestra_2dhist.sum("rh_bin")).plot(
+    vmax=0.05,
+    cmap="Blues",
+    ax=ax,
+    y="ta_bin",
+    x="rh_bin",
+    add_colorbar=False,
+)
+ax = axes[1]
+orcestra_ta.mean("sonde_id").rolling(ta=5).mean().plot(
+    label="ORCESTRA", y="ta", color="blue", ax=ax
+)
+gate_ta.mean("sonde_id").rolling(ta=5).mean().plot(
+    label="GATE", y="ta", color="red", ax=ax
+)
+
+
+(gate_2dhist / gate_2dhist.sum("rh_bin")).plot(
+    vmax=0.05,
+    cmap="Reds",
+    ax=ax,
+    y="ta_bin",
+    x="rh_bin",
+    add_colorbar=False,
+)
+
+
+ax.legend()
+for ax in axes:
+    ax.set_ylabel("")
+    ax.invert_yaxis()
+    ax.set_xlabel("Relative humidity")
+    ax.axhline(273.15, color="k", linestyle="--", linewidth=0.5)
+
+axes[0].set_ylabel("Temperature / K")
+fig.suptitle(
+    "RH histograms for ORCESTRA and GATE and mean; lons in [-27, -20], lats in [5, 12]"
+)
+sns.despine(offset={"bottom": 10})
+fig.savefig(
+    "../plots/gate/rh_histograms.pdf",
+)
+# %%
+colors = sns.color_palette("Paired", n_colors=8)
+cs_threshold = 0.95
+fig, ax = plt.subplots(figsize=(5, 5))
+
+gate_ta.where(gate_ta.max(dim="ta") < cs_threshold).mean("sonde_id").rolling(
+    ta=5
+).mean().plot(y="ta", ax=ax, label=f"GATE rh_max < {cs_threshold:.2f}", c=colors[4])
+gate_ta.mean("sonde_id").rolling(ta=5).mean().plot(
+    label="GATE", y="ta", ax=ax, c=colors[5]
+)
+orcestra_ta.where(orcestra_ta.max(dim="ta") < cs_threshold).mean("sonde_id").rolling(
+    ta=5
+).mean().plot(y="ta", ax=ax, label=f"ORCESTRA rh_max < {cs_threshold:.2f}", c=colors[0])
+orcestra_ta.mean("sonde_id").rolling(ta=5).mean().plot(
+    label="ORCESTRA", y="ta", ax=ax, c=colors[1]
+)
+
+
+ax.invert_yaxis()
+ax.legend()
+ax.set_xlabel("Relative humidity")
+ax.set_ylabel("Temperature / K")
+sns.despine(offset=10)
+fig.savefig(
+    "../plots/gate/total_vs_clear_sky.pdf",
+)
 # %%
 fig, ax = plt.subplots(figsize=(6, 6))
 
@@ -104,39 +239,3 @@ orcestra_total = xr.concat(
     dim="sonde_id",
     data_vars="minimal",
 )
-
-
-fig, axes = plt.subplots(ncols=2, figsize=(10, 4))
-for data, ax, label, rh_ice in zip(
-    [orcestra_total, gate],  # .where(orcestra_total.launch_lon > -40, drop=True)
-    axes,
-    ["orcestra", "gate"],
-    [p_rap, p_gate],
-):
-    hist = histogram(
-        data.ta.sel(altitude=slice(0, 14000)),
-        data.rh.sel(altitude=slice(0, 14000)),
-        bins=[np.linspace(220, 300, 100), np.linspace(0, 1.1, 100)],
-    )
-    hist = hist / hist.sum(dim=["rh_bin"])
-    p = hist.plot(
-        ax=ax,
-        cmap="Blues",
-        vmax=0.04,
-        add_colorbar=False,
-    )
-
-    ((hist * hist.rh_bin).sum(dim="rh_bin") / (hist.sum(dim="rh_bin"))).plot(
-        y="ta_bin", color="#0052A9", ax=ax
-    )
-    ax.invert_yaxis()
-    ax.set_title(label)
-    ax.axhline(273.15, color="k", linestyle="--")
-for ax in axes:
-    ax.plot(
-        rh_ice,
-        ta,
-        color="black",
-    )
-ph.plot_cbar(fig, p, ax, "count / total", "1")
-sns.despine(offset={"bottom": 10})

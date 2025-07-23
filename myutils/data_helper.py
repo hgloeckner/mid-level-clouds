@@ -13,6 +13,12 @@ def get_hist_of_ta(da_t, da_var, bins_var, bins_ta=np.linspace(240, 305, 200)):
     )
 
 
+def get_hist_of_ta_2d(da_t, da_var, bins_var, bins_ta=np.linspace(240, 305, 200)):
+    return histogram(
+        da_t, da_var, bins=[bins_ta, bins_var], dim=["altitude", "sonde_id"]
+    )
+
+
 def get_ml_cloud(wales, var="bsrgl", threshold=20, ml_min=4000, ml_max=8000):
     mid_level = wales.sel(altitude=slice(ml_min, ml_max))
 
