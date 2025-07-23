@@ -14,20 +14,21 @@ import myutils.open_datasets as opends  # noqa
 
 es = mt.make_es_mxd(es_liq=svp.liq_analytic, es_ice=svp.ice_analytic)
 # %%
-radios = opends.open_radiosondes(
-    "bafybeigensqyqxfyaxgyjhwn6ytdpi3i4sxbtffd4oc27zbimyro4hygjq"
-)
+cid = opends.get_cid()
+rs = opends.open_radiosondes(f"{cid}/Radiosondes/RAPSODI_RS_ORCESTRA_level2.zarr")
+rs = rs.where(rs.launch_lon > -40, drop=True)
 
-drops = opends.open_dropsondes(
-    "bafybeicb33v6ohezyhgq5rumq4g7ejnfqxzcpuzd4i2fxnlos5d7ebmi3m"
-)
-gate = opends.open_gate("QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A")
+
+ds = opends.open_dropsondes(f"{cid}/HALO/dropsondes/Level_3/PERCUSION_Level_3.zarr")
+ds = ds.where(ds.launch_lon > -40, drop=True)
+
+gate = opends.open_gate(opends.get_gate_cid())
 
 unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
 datasets = {
-    "radiosonde": radios,
-    "dropsonde": drops,
+    "radiosonde": rs,
+    "dropsonde": ds,
     "gate": gate,
 }
 # %%
