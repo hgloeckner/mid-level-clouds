@@ -12,7 +12,7 @@ import sys
 sys.path.append("../")
 import myutils.open_datasets as opends  # noqa
 import myutils.plot_helper as ph  # noqa
-from myutils.data_helper import get_hist_of_ta, get_hist_of_ta_2d
+from myutils.data_helper import get_hist_of_ta, get_hist_of_ta_2d, get_gate_region
 
 # %%
 cid = opends.get_cid()
@@ -27,35 +27,10 @@ unique, keep = np.unique(gate.sonde_id.values, return_index=True)
 gate = gate.isel(sonde_id=keep)
 # %%
 
-lats = [5, 12]
-lons = [-27, -20]
-orcestra_gate = xr.concat(
-    [
-        rs.where(
-            (lons[0] < rs.launch_lon)
-            & (rs.launch_lon < lons[1])
-            & (lats[0] < rs.launch_lat)
-            & (rs.launch_lat < lats[1])
-            & (rs.ascent_flag == 0),
-            drop=True,
-        ),
-        ds.where(
-            (lons[0] < ds.launch_lon)
-            & (ds.launch_lon < lons[1])
-            & (lats[0] < ds.launch_lat)
-            & (ds.launch_lat < lats[1]),
-            drop=True,
-        ),
-    ],
-    dim="sonde_id",
+orcestra_gate, gate_region = get_gate_region(
+    gate, rs=rs, ds=ds, ascent_flag=0, lats=(5, 12), lons=(-27, -20)
 )
-gate_region = gate.where(
-    (lons[0] < gate.launch_lon)
-    & (gate.launch_lon < lons[1])
-    & (lats[0] < gate.launch_lat)
-    & (gate.launch_lat < lats[1]),
-    drop=True,
-)
+
 # %%
 orcestra_ta = get_hist_of_ta(
     orcestra_gate.ta.sel(altitude=slice(0, 14000)),

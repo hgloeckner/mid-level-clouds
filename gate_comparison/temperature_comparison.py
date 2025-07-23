@@ -16,18 +16,6 @@ sys.path.append("../")
 import myutils.open_datasets as opends  # noqa
 import myutils.plot_helper as ph  # noqa
 
-
-# %%
-cid = opends.get_cid()
-rs = opends.open_radiosondes(f"{cid}/Radiosondes/RAPSODI_RS_ORCESTRA_level2.zarr")
-rs = rs.where(rs.launch_lon > -40, drop=True)
-
-
-ds = opends.open_dropsondes(f"{cid}/HALO/dropsondes/Level_3/PERCUSION_Level_3.zarr")
-ds = ds.where(ds.launch_lon > -40, drop=True)
-
-gate = opends.open_gate("QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A")
-
 # %%# %%
 reanalysis = opends.open_reanalysis(chunks={}, zoom=7)
 # %%
