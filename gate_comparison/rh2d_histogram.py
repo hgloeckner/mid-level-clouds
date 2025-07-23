@@ -209,8 +209,9 @@ def get_ice_liq(ta, theta, q):
     return pv / es(ta)
 
 
-def get_rh_from_q(ta, p):
-    return es(ta) * Rd / (Rv * (p - es(ta)))
+def get_rh(T, q, p, es):
+    x = es(T) * Rd / Rv / (p - es(T))
+    return q * (1 + x) / x
 
 
 def get_rh_ice_from_liq(ta, da):
