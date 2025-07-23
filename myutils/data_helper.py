@@ -30,7 +30,7 @@ def get_ml_cloud(wales, var="bsrgl", threshold=20, ml_min=4000, ml_max=8000):
     )
 
 
-def sel_gate_region(
+def get_gate_region(
     gate, rs=None, ds=None, ascent_flag=0, lats=(5, 12), lons=(-27, -20)
 ):
     """
