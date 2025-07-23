@@ -128,3 +128,7 @@ def open_reanalysis(chunks=None, **kwargs):
 
 def get_cid():
     return "QmPNVTb5fcN59XUi2dtUZknPx5HNnknBC2x4n7dtxuLdwi"
+
+
+def get_gate_cid():
+    return "QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A"
