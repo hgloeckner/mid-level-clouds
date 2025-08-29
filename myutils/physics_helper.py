@@ -40,7 +40,29 @@ def calc_Tv(T, mr):
 
 
 def get_stability(theta, T):
+    # \Gamma_d - \Gamma according to Holton & Hakim (5th edition)  2013 eq 2.49
     return (T / theta * theta.differentiate("altitude")) * 1000
+
+
+def get_n2(th, qv, altdim="altitude"):
+    """Returns the Brunt-Vaisala frequeny for unsaturated air.
+
+    It assumes that the input are type xarray with their first coordinate being
+    altitude in meters, and that the air is no where saturated
+
+    Args:
+        th: potential temperature
+        qv: specific humidity
+    """
+
+    Rv = constants.water_vapor_gas_constant
+    Rd = constants.dry_air_gas_constant
+    g = constants.gravity_earth
+    R = Rd + (Rv - Rd) * qv
+    dlnthdz = np.log(th).differentiate(altdim)
+    dqvdz = qv.differentiate(altdim)
+
+    return np.sqrt(g * (dlnthdz + (Rv - Rd) * dqvdz / R))
 
 
 def get_csc_stab(rho, stability, H):
@@ -71,3 +93,13 @@ def wv2q(wv):
     C2 = 1 - C1
     rho_w = wv.wv
     return C1 * rho_w / (wv.rho_air - C2 * rho_w)
+
+
+def get_wdir_and_wspd(u, v):
+    """
+    Calculate wind direction and speed from u and v components.
+    Wind direction is given in degrees from north.
+    """
+    wdir = (180 + np.arctan2(u, v) * 180 / np.pi) % 360
+    wspd = np.sqrt(u**2 + v**2)
+    return wdir, wspd
