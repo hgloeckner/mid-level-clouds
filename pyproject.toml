@@ -1,0 +1,39 @@
+[project]
+name = "mlclouds"
+version = "0.1.0"
+description = "Helene's mid-level-clouds"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiohttp",
+    "bottleneck",
+    "cartopy",
+    "cmocean",
+    "cython",
+    "easygems",
+    "flox",
+    "fsspec",
+    "intake<2",
+    "intake-xarray<2",
+    "ipfsspec>=0.5.3",
+    "ipykernel",
+    "ipython",
+    "matplotlib",
+    "moist-thermodynamics>=0.0.5",
+    "numpy",
+    "pandas",
+    "pytest",
+    "requests",
+    "ruff",
+    "scipy",
+    "seaborn",
+    "setuptools>=80.9.0",
+    "xarray",
+    "xhistogram",
+    "zarr>2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  ".", "mlclouds",
+]
