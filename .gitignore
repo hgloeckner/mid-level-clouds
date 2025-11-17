@@ -41,3 +41,6 @@ _version.py
 **/*.log
 **/*.doc*
 **/cache/
+
+.env/
+.vscode/

@@ -21,7 +21,9 @@ dependencies = [
     "matplotlib",
     "moist-thermodynamics>=0.0.5",
     "numpy",
+    "orcestra",
     "pandas",
+    "pydropsonde",
     "pytest",
     "requests",
     "ruff",
@@ -30,10 +32,10 @@ dependencies = [
     "setuptools>=80.9.0",
     "xarray",
     "xhistogram",
-    "zarr>2",
+    "zarr",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = [
-  ".", "mlclouds",
+  ".", "mlclouds/ml_clouds", "mlclouds"
 ]
