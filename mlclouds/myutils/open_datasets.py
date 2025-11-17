@@ -4,7 +4,6 @@ import hashlib
 import intake
 
 
-
 def hash_xr_var(da):
     return np.array(
         [

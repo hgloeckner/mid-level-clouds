@@ -1,23 +1,18 @@
 import numpy as np
-from xhistogram.xarray import histogram
 import xarray as xr
 import moist_thermodynamics.functions as mtf
-import intake
-import hashlib
-import numpy as np
-import xarray as xr
 from matplotlib.path import Path
 
-east= [[-34, 3.5], [-20, 3.5], [-20, 13.5], [-34, 13.5]]
+east = [[-34, 3.5], [-20, 3.5], [-20, 13.5], [-34, 13.5]]
 west = [[-59, 6], [-45, 6], [-45, 16], [-59, 16]]
 gate_a = [
-        [-27.0, 6.5],
-        [-23.5, 5.0],
-        [-20.0, 6.5],
-        [-20.0, 10.5],
-        [-23.5, 12.0],
-        [-27.0, 10.5],
-    ]
+    [-27.0, 6.5],
+    [-23.5, 5.0],
+    [-20.0, 6.5],
+    [-20.0, 10.5],
+    [-23.5, 12.0],
+    [-27.0, 10.5],
+]
 north = [[-26, 13.5], [-20, 13.5], [-20, 18.5], [-26, 18.5]]
 
 variable_attribute_dict = {
@@ -54,29 +49,29 @@ variable_attribute_dict = {
 }
 
 
-
-
 def rolling_hist(ds, ta_bin_low=15, rh_bin_low=5, ta_bin_up=20, rh_bin_up=7):
-    return (xr.concat(
-    [(ds
-      .where(ds > 0)
-      .rolling(ta_bin=ta_bin_low, center=True, min_periods=3).sum()
-        .rolling(rh_bin=rh_bin_low, center=True, min_periods=3).sum()
-      .sel(ta_bin=slice(270, 305))
-    
-    ),
-    (ds
-      .where(ds > 0)
-      .rolling(ta_bin=ta_bin_up, center=True, min_periods=3).sum()
-        .rolling(rh_bin=rh_bin_up, center=True, min_periods=3).sum()
-     .sel(ta_bin=slice(None, 270))
-    
-    ),
-    ],
-    dim="ta_bin"
-)
-        .sortby("ta_bin")
-)
+    return xr.concat(
+        [
+            (
+                ds.where(ds > 0)
+                .rolling(ta_bin=ta_bin_low, center=True, min_periods=3)
+                .sum()
+                .rolling(rh_bin=rh_bin_low, center=True, min_periods=3)
+                .sum()
+                .sel(ta_bin=slice(270, 305))
+            ),
+            (
+                ds.where(ds > 0)
+                .rolling(ta_bin=ta_bin_up, center=True, min_periods=3)
+                .sum()
+                .rolling(rh_bin=rh_bin_up, center=True, min_periods=3)
+                .sum()
+                .sel(ta_bin=slice(None, 270))
+            ),
+        ],
+        dim="ta_bin",
+    ).sortby("ta_bin")
+
 
 def interpolate_gaps(ds):
     akima_vars = ["u", "v"]
@@ -145,4 +140,3 @@ def sel_sub_domain(
     points = np.column_stack([ds[lon_var].values, ds[lat_var].values])
     inside = Path(polygon).contains_points(points)
     return ds.sel(**{item_var: inside})
-

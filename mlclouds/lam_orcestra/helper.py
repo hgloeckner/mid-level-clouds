@@ -1,9 +1,9 @@
-
 import xarray as xr
 import moist_thermodynamics.functions as mtf
 import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.utilities as mtu
 import numpy as np
+
 
 def apply_brunt_vaisala_frequency(ds, altdim="z", q="qv"):
     return xr.apply_ufunc(
