@@ -1,67 +1,148 @@
 import numpy as np
 from xhistogram.xarray import histogram
 import xarray as xr
+import moist_thermodynamics.functions as mtf
+import intake
+import hashlib
+import numpy as np
+import xarray as xr
+from matplotlib.path import Path
+
+east= [[-34, 3.5], [-20, 3.5], [-20, 13.5], [-34, 13.5]]
+west = [[-59, 6], [-45, 6], [-45, 16], [-59, 16]]
+gate_a = [
+        [-27.0, 6.5],
+        [-23.5, 5.0],
+        [-20.0, 6.5],
+        [-20.0, 10.5],
+        [-23.5, 12.0],
+        [-27.0, 10.5],
+    ]
+north = [[-26, 13.5], [-20, 13.5], [-20, 18.5], [-26, 18.5]]
+
+variable_attribute_dict = {
+    "ta": {
+        "standard_name": "air_temperature",
+        "units": "K",
+    },
+    "p": {
+        "standard_name": "air_pressure",
+        "units": "Pa",
+    },
+    "q": {
+        "standard_name": "specific_humidity",
+        "units": "kg/kg",
+    },
+    "u": {
+        "standard_name": "eastward_wind",
+        "units": "m/s",
+    },
+    "v": {
+        "standard_name": "northward_wind",
+        "units": "m/s",
+    },
+    "rh": {
+        "standard_name": "relative_humidity",
+        "units": "1",
+        "description": "Relative to Wagner-Pruss saturation vapor pressure over liquid",
+    },
+    "theta": {
+        "standard_name": "air_potential_temperature",
+        "units": "K",
+        "description": "Use dry air gas constants and 1000 hPa as reference pressure",
+    },
+}
 
 
-def get_hist_of_ta(da_t, da_var, bins_var, bins_ta=np.linspace(240, 305, 200)):
-    bin_name = da_var.name + "_bin"
-    ta_name = da_t.name
-    hist = histogram(da_t, da_var, bins=[bins_ta, bins_var], dim=["altitude"]).compute()
-    return (
-        ((hist * hist[bin_name]).sum(dim=bin_name) / hist.sum(bin_name))
-        .interpolate_na(dim=f"{ta_name}_bin")
-        .rename({f"{ta_name}_bin": ta_name})
+
+
+def rolling_hist(ds, ta_bin_low=15, rh_bin_low=5, ta_bin_up=20, rh_bin_up=7):
+    return (xr.concat(
+    [(ds
+      .where(ds > 0)
+      .rolling(ta_bin=ta_bin_low, center=True, min_periods=3).sum()
+        .rolling(rh_bin=rh_bin_low, center=True, min_periods=3).sum()
+      .sel(ta_bin=slice(270, 305))
+    
+    ),
+    (ds
+      .where(ds > 0)
+      .rolling(ta_bin=ta_bin_up, center=True, min_periods=3).sum()
+        .rolling(rh_bin=rh_bin_up, center=True, min_periods=3).sum()
+     .sel(ta_bin=slice(None, 270))
+    
+    ),
+    ],
+    dim="ta_bin"
+)
+        .sortby("ta_bin")
+)
+
+def interpolate_gaps(ds):
+    akima_vars = ["u", "v"]
+    linear_vars = ["theta", "q", "p"]
+
+    ds = ds.assign(
+        **{
+            var: ds[var].interpolate_na(dim="altitude", method="akima", max_gap=1500)
+            for var in akima_vars
+        }
+    )
+    ds = ds.assign(p=np.log(ds.p))
+    ds = ds.assign(
+        **{
+            var: ds[var].interpolate_na(dim="altitude", method="linear", max_gap=1500)
+            for var in linear_vars
+        }
+    )
+    ds = ds.assign(p=np.exp(ds.p))
+    ds = ds.assign(
+        ta=mtf.theta2T(ds.theta, ds.p),
+    )
+    ds = ds.assign(
+        rh=mtf.specific_humidity_to_relative_humidity(ds.q, ds.p, ds.ta),
     )
 
+    return ds
 
-def get_hist_of_ta_2d(da_t, da_var, bins_var, bins_ta=np.linspace(240, 305, 200)):
-    return histogram(
-        da_t, da_var, bins=[bins_ta, bins_var], dim=["altitude", "sonde_id"]
+
+def extrapolate_sfc(ds):
+    """
+    Extrapolate surface values to the lowest level.
+    This function assumes that the dataset has an altitude dimension.
+    """
+    constant_vars = ["u", "v", "theta", "q"]
+    ds = ds.assign(
+        **{
+            var: ds[var].interpolate_na(
+                dim="altitude", method="nearest", max_gap=300, fill_value="extrapolate"
+            )
+            for var in constant_vars
+        }
     )
-
-
-def get_ml_cloud(wales, var="bsrgl", threshold=20, ml_min=4000, ml_max=8000):
-    mid_level = wales.sel(altitude=slice(ml_min, ml_max))
-
-    return (
-        wales.where((mid_level[var].max(dim="altitude") >= threshold))
-        .compute()
-        .dropna("time", how="all")
+    ds = ds.assign(
+        p=np.exp(
+            np.log(ds.p).interpolate_na(
+                dim="altitude", method="linear", max_gap=300, fill_value="extrapolate"
+            )
+        )
     )
+    ds = ds.assign(
+        ta=mtf.theta2T(ds.theta, ds.p),
+    )
+    ds = ds.assign(
+        rh=mtf.specific_humidity_to_relative_humidity(ds.q, ds.p, ds.ta),
+    )
+    return ds
 
 
-def get_gate_region(
-    gate, rs=None, ds=None, ascent_flag=0, lats=(5, 12), lons=(-27, -20)
+def sel_sub_domain(
+    ds, polygon, item_var="sonde", lon_var="launch_lon", lat_var="launch_lat"
 ):
     """
-    ascent_flag: 0 for descending, 1 for ascending
+    select points from dataset that lie within the polygon
     """
-    if rs is not None:
-        orcestra_gate = xr.concat(
-            [
-                rs.where(
-                    (lons[0] < rs.launch_lon)
-                    & (rs.launch_lon < lons[1])
-                    & (lats[0] < rs.launch_lat)
-                    & (rs.launch_lat < lats[1])
-                    & (rs.ascent_flag == ascent_flag),
-                    drop=True,
-                ),
-                ds.where(
-                    (lons[0] < ds.launch_lon)
-                    & (ds.launch_lon < lons[1])
-                    & (lats[0] < ds.launch_lat)
-                    & (ds.launch_lat < lats[1]),
-                    drop=True,
-                ),
-            ],
-            dim="sonde_id",
-        )
-    gate_region = gate.where(
-        (lons[0] < gate.launch_lon)
-        & (gate.launch_lon < lons[1])
-        & (lats[0] < gate.launch_lat)
-        & (gate.launch_lat < lats[1]),
-        drop=True,
-    )
-    return (orcestra_gate, gate_region) if rs is not None else gate_region
+    points = np.column_stack([ds[lon_var].values, ds[lat_var].values])
+    inside = Path(polygon).contains_points(points)
+    return ds.sel(**{item_var: inside})
+
