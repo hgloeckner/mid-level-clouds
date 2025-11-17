@@ -4,22 +4,19 @@ import hashlib
 import intake
 
 
+
+def hash_xr_var(da):
+    return np.array(
+        [
+            hashlib.sha256(str(entry).encode("ascii")).hexdigest()[:16]
+            for entry in da.values
+        ]
+    )
+
+
 def open_dropsondes(cid):
     ds = xr.open_dataset(f"ipfs://{cid}", engine="zarr")
-    ds = (
-        ds.rename(
-            {
-                "aircraft_latitude": "launch_lat",
-                "aircraft_longitude": "launch_lon",
-            }
-        )
-        .reset_coords(["aircraft_msl_altitude"])
-        .swap_dims({"sonde": "sonde_id"})
-    )
-    try:
-        return ds.swap_dims({"circle": "circle_id"})
-    except ValueError:
-        return ds
+    return ds.reset_coords(["launch_altitude"])
 
 
 def open_radiosondes(cid):
@@ -27,53 +24,53 @@ def open_radiosondes(cid):
     return (
         ds.rename(
             {
-                "alt": "altitude",
-                "sounding": "sonde_id",
-                "flight_time": "bin_average_time",
+                "height": "altitude",
                 "platform": "platform_id",
             }
         )
-        .reset_coords(["p", "flight_lat", "flight_lon", "bin_average_time"])
-        .swap_dims({"launch_time": "sonde_id"})
-    )
-
-
-def hash_xr_var(da):
-    return np.array(
-        [
-            hashlib.sha256(str(entry).encode("ascii")).hexdigest()[-8:]
-            for entry in da.values
-        ]
+        .reset_coords(["p", "lat", "lon", "interpolated_time", "sonde_id", "alt"])
+        .swap_dims({"launch_time": "sonde"})
     )
 
 
 def open_gate(cid):
     ds = xr.open_dataset(f"ipfs://{cid}", engine="zarr")
-    ds = ds.assign_coords({"sonde_id": ("time", hash_xr_var(ds.time))})
     return (
-        ds.rename(
-            {
-                "alt": "altitude",
-                "lat_beg": "launch_lat",
-                "lon_beg": "launch_lon",
-                "ua": "u",
-                "va": "v",
-                "platforms": "platform_id",
-                "time": "launch_time",
-            }
-        )
-        .set_coords(["launch_lat", "launch_lon"])
-        .swap_dims({"launch_time": "sonde_id"})
+        ds.set_coords(["launch_lat", "launch_lon", "launch_time"])
+        .swap_dims({"sonde": "launch_time"})
+        .sel(launch_time=slice("1974-08-10", "1974-09-30"))
+        .swap_dims({"launch_time": "sonde"})
     )
+
+
+def open_reanalysis(chunks=None, **kwargs):
+    if chunks is None:
+        chunks = {}
+    cat = intake.open_catalog("http://data.nextgems-h2020.eu/catalog.yaml")
+    return {
+        "ERA5": cat.ERA5(chunks=chunks, **kwargs).to_dask(),
+        "MERRA2": cat.MERRA2(chunks=chunks, **kwargs).to_dask(),
+        "JRA3Q": cat.JRA3Q(chunks=chunks, **kwargs).to_dask(),
+    }
+
+
+def get_cids():
+    orcestra_main = "QmXkSUDo97PaDxsPzCPXJXwCFDLBMp7AVdPdV5CBQoagUN"
+    return {
+        "gate": "QmWFfuLW7VSqEFrAwaJr1zY9CzWqF4hC22yqgXELmY133K",
+        "orcestra": orcestra_main,
+        "radiosondes": f"{orcestra_main}/products/Radiosondes/Level_2/RAPSODI_RS_ORCESTRA_level2.zarr",
+        "dropsondes": f"{orcestra_main}/products/HALO/dropsondes/Level_3/PERCUSION_Level_3.zarr",
+    }
 
 
 def open_wales(masked=True):
     if masked:
-        wv_path = "/work/mh0066/m301046/wales/wales_wv_masked.zarr"
-        no_wv_path = "/work/mh0066/m301046/wales/wales_no_wv_masked.zarr"
+        wv_path = "/work/mh0066/m301046/Data/wales/wales_wv_masked.zarr"
+        no_wv_path = "/work/mh0066/m301046/Data/wales/wales_no_wv_masked.zarr"
     else:
-        wv_path = "/work/mh0066/m301046/wales/wales_wv.zarr"
-        no_wv_path = "/work/mh0066/m301046/wales/wales_no_wv.zarr"
+        wv_path = "/work/mh0066/m301046/Data/wales/wales_wv.zarr"
+        no_wv_path = "/work/mh0066/m301046/Data/wales/wales_no_wv.zarr"
 
     wv = xr.open_dataset(
         wv_path,
