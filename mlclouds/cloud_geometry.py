@@ -9,6 +9,7 @@ sys.path.append("../")
 from myutils import open_datasets
 from myutils import physics_helper as physics
 from myutils.data_helper import sel_sub_domain
+import myutils.data_helper as dh
 # %%
 
 wv, no_wv = open_datasets.open_wales(masked=True)
@@ -38,9 +39,9 @@ cloud_top = xr.DataArray(
 ).to_dataframe()
 # %%
 
-east = [[-34.5, 2.5], [-34.5, 13.5], [-20, 13.5], [-20, 2.5]]
-west = [[-59, 6], [-59, 17], [-44.5, 17], [-44.5, 6]]
-north = [[-26, 13.5], [-26, 19], [-20, 19], [-20, 13.5]]
+east = dh.east
+west = dh.west
+north = dh.north
 cloud_top_north = xr.DataArray(
     data=find_highest_cloud_altitude(
         sel_sub_domain(
@@ -83,7 +84,7 @@ histkwargs = {
     "ax": ax,
     "y": "cloud_top",
 }
-# sns.histplot(cloud_top,color="k", **histkwargs)
+sns.histplot(cloud_top, color="k", **histkwargs)
 # sns.histplot(cloud_top_north, color="#FF7982", **histkwargs)
 # sns.histplot(cloud_top_east, color="#B6001E",  **histkwargs)
 # sns.histplot(cloud_top_west, color="#00b4d8",  **histkwargs)
@@ -94,23 +95,36 @@ kdekwargs = {
     "ax": ax,
     "y": "cloud_top",
 }
-pt = sns.kdeplot(cloud_top, color="k", **kdekwargs)
-sns.kdeplot(cloud_top_north, color="#FF7982", label="North", **kdekwargs)
-sns.kdeplot(cloud_top_east, color="#B6001E", label="East", **kdekwargs)
-sns.kdeplot(cloud_top_west, color="#00b4d8", label="West", **kdekwargs)
+pt = sns.kdeplot(cloud_top, color="k", label="Cloud Top Altitude", **kdekwargs)
+# sns.kdeplot(cloud_top_north, color="#FF7982", label="North", **kdekwargs)
+# sns.kdeplot(cloud_top_east, color="#B6001E", label="East", **kdekwargs)
+# sns.kdeplot(cloud_top_west, color="#00b4d8", label="West", **kdekwargs)
 
 ax.axhline(5836.80, xmax=0.5, color="k", alpha=0.5)
-ax.axhline(6559.80, xmax=0.5, color="#FF7982", alpha=0.5)
-ax.axhline(5819.43, xmax=0.5, color="#B6001E", alpha=0.5)
-ax.axhline(5378.91, xmax=0.5, color="#00b4d8", alpha=0.5)
-ax.set_yticks([0, 2000, 4000, 5380, 5830, 6560, 8000, 10000, 12000, 14000])
+# ax.axhline(6559.80, xmax=0.5, color="#FF7982", alpha=0.5)
+# ax.axhline(5819.43, xmax=0.5, color="#B6001E", alpha=0.5)
+# ax.axhline(5378.91, xmax=0.5, color="#00b4d8", alpha=0.5)
+ax.set_yticks(
+    [
+        0,
+        2000,
+        4000,  # 5380,
+        5836,  # 6560,
+        8000,
+        10000,
+        12000,
+        14000,
+    ]
+)
 sns.despine()
 ax.legend()
 ax.set_ylim(0, 14000)
 ax.set_ylabel("Cloud Top Altitude / m")
 fig.tight_layout()
 fig.savefig("plots/cloud_top_altitude_distribution.pdf")
-fig.savefig("/scratch/m/m301046/cloud_top_altitude_distribution.pdf", transparent=True)
+fig.savefig(
+    "/scratch/m/m301046/cloud_top_altitude_distribution_mean.pdf", transparent=True
+)
 # %%
 for i in range(4):
     x, y = pt.lines[4 + i].get_data()
