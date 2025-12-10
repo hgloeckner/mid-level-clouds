@@ -41,6 +41,10 @@ _version.py
 **/*.log
 **/*.doc*
 **/cache/
+not_git/
+static/
 
-.env/
+**/playground.py
+env
+**/.env
 .vscode/
