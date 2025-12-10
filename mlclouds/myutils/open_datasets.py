@@ -111,17 +111,6 @@ def open_radiative_fluxes(path=None):
     return ds.assign(cooling_rate=-ds.heating_rate)
 
 
-def open_reanalysis(chunks=None, **kwargs):
-    if chunks is None:
-        chunks = {}
-    cat = intake.open_catalog("http://data.nextgems-h2020.eu/catalog.yaml")
-    return {
-        "ERA5": cat.ERA5(chunks=chunks, **kwargs).to_dask(),
-        "MERRA2": cat.MERRA2(chunks=chunks, **kwargs).to_dask(),
-        "JRA3Q": cat.JRA3Q(chunks=chunks, **kwargs).to_dask(),
-    }
-
-
 def get_cid():
     return "QmPNVTb5fcN59XUi2dtUZknPx5HNnknBC2x4n7dtxuLdwi"
 
