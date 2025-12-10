@@ -2,9 +2,12 @@
 import xarray as xr
 import glob
 import numpy as np
+import healpix
+
 import myutils.data_helper as dh
 import easygems.healpix as egh
 import myutils.open_datasets as od
+from pydropsonde.helper import xarray_helper as xh
 
 # %%
 path_to_files = glob.glob(
@@ -34,8 +37,6 @@ rapsodi = (
     .pipe(dh.extrapolate_sfc)
 )
 # %%
-import numpy as np
-import healpix
 
 
 def get_lat_lon_mask(dx, lat, lon):
@@ -96,7 +97,6 @@ lam_complete = lam_complete.assign(
     )
 ).drop_vars(["wa", "height_half", "z_half"])
 # %%
-from pydropsonde.helper import xarray_helper as xh
 
 xh.write_ds(
     lam_complete.reset_coords(["height_full"]).chunk({"sonde": -1, "z": -1}),
