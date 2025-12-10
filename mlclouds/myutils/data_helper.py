@@ -140,3 +140,16 @@ def sel_sub_domain(
     points = np.column_stack([ds[lon_var].values, ds[lat_var].values])
     inside = Path(polygon).contains_points(points)
     return ds.sel(**{item_var: inside})
+
+
+def find_highest_cloud_altitude(
+    ds, variable_name="bsrgl", threshold=20, altdim="altitude"
+):
+    ds = ds.sortby(altdim)  # .chunk({"altitude": -1, "time": 1000})
+    mask = ds[variable_name] >= threshold
+    mask_inv = mask.isel({altdim: slice(None, None, -1)})
+
+    highest_altitude = ds[altdim].values[
+        mask.sizes[altdim] - 1 - mask_inv.argmax(dim=altdim)
+    ]
+    return np.where(mask.any(dim=altdim), highest_altitude, np.nan)
