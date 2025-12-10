@@ -4,12 +4,100 @@ import xarray as xr
 import numpy as np
 from xhistogram.xarray import histogram
 import matplotlib.pyplot as plt
-import cmocean as cmo
 import moist_thermodynamics.functions as mtf
+import moist_thermodynamics.utilities as mtu
+import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.saturation_vapor_pressures as svp
-import lam_orcestra.helper as help
-import myutils.data_helper as dh
+
+# import lam_orcestra.helper as help
+# import myutils.data_helper as dh
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+
+def apply_brunt_vaisala_frequency(ds, altdim="z", q="qv"):
+    return xr.apply_ufunc(
+        mtf.brunt_vaisala_frequency,
+        ds.theta,
+        ds[q],
+        ds[altdim],
+        input_core_dims=[[altdim], [altdim], [altdim]],
+        output_core_dims=[[altdim]],
+        vectorize=True,
+        dask="parallelized",
+        output_dtypes=[ds.theta.dtype],
+    )
+
+
+P = np.arange(100900.0, 4000.0, -500)
+
+
+def make_sounding_from_adiabat(
+    P, Tsfc=301.0, qsfc=17e-3, Tmin=200.0, thx=mtf.theta_l, integrate=False
+) -> xr.Dataset:
+    """creates a sounding from a moist adiabat
+
+    Cacluates the moist adiabate based either on an integration or a specified
+    isentrope with pressure as the vertical coordinate.
+
+    Args:
+        P: pressure
+        Tsfc: starting (value at P.max()) temperature
+        qsfc: starting (value at P.max()) specific humidity
+        Tmin: minimum temperature of adiabat
+        thx: function to calculate isentrope if integrate = False
+        integrate: determines if explicit integration will be used.
+    """
+
+    TPq = xr.Dataset(
+        data_vars={
+            "T": (
+                ("levels",),
+                mtu.moist_adiabat_with_ice(
+                    P, Tx=Tsfc, qx=qsfc, Tmin=Tmin, thx=thx, integrate=integrate
+                ),
+                {"units": "K", "standard_name": "air_temperature", "symbol": "$T$"},
+            ),
+            "P": (
+                ("levels",),
+                P,
+                {"units": "Pa", "standard_name": "air_pressure", "symbol": "$P$"},
+            ),
+            "q": (
+                ("levels",),
+                qsfc * np.ones(len(P)),
+                {"units": "1", "standard_name": "specific_humidity", "symbol": "$q$"},
+            ),
+        },
+    )
+    TPq = TPq.assign(
+        altitude=xr.DataArray(
+            mtf.pressure_altitude(TPq.P, TPq.T, qv=TPq.q).values,
+            dims=("levels"),
+            attrs={
+                "units": "m",
+                "standard_name": "altitude",
+                "description": "hydrostatic altitude given the datasets temperature and pressure",
+            },
+        )
+    )
+    TPq = TPq.assign(
+        theta=(
+            TPq.T.dims,
+            mtf.theta(TPq.T, TPq.P).values,
+            {
+                "units": "K",
+                "standard_name": "air_potential_teimerature",
+                "symbol": "$\theta$",
+            },
+        )
+    )
+    TPq = TPq.assign(
+        P0=xr.DataArray(
+            mtc.P0, attrs={"units": "Pa", "standards_name": "referenece_pressure"}
+        )
+    )
+
+    return TPq.set_coords("altitude").swap_dims({"levels": "altitude"})
 
 
 # %%
@@ -124,9 +212,6 @@ lam_sondes = xr.open_dataset(
     "/scratch/m/m301046/lam_sondes_z.zarr",
     engine="zarr",
 )
-ifs = xr.open_dataset(
-    "/work/mh0492/m301067/orcestra/results/timeseries/ifs_interpolated_on_dropsondes_profiles_2nd-days.nc"
-)
 
 cids = get_cids()
 beach = (
@@ -136,19 +221,6 @@ beach = (
     .isel(sonde=slice(2, None))
 )
 
-gate = (
-    (
-        xr.open_dataset(
-            "ipfs://QmWZryTDTZu68MBzoRDQRcUJzKdCrP2C4VZfZw1sZWMJJc", engine="zarr"
-        )
-        .set_coords(["launch_lat", "launch_lon", "launch_time"])
-        .swap_dims({"sonde": "launch_time"})
-        .sel(launch_time=slice("1974-08-10", "1974-09-30"))
-        .swap_dims({"launch_time": "sonde"})
-    )
-    .pipe(interpolate_gaps)
-    .pipe(extrapolate_sfc)
-)
 # %% create lam dataset
 lam_ds = lam_sondes.where(
     lam_sondes.sonde_id.isin(beach.sonde_id.values),
@@ -175,23 +247,13 @@ lam_subset = lam_subset.assign(
     theta=mtf.theta(lam_subset.ta, lam_subset.pfull),
 ).sel(z=slice(15000, None))
 lam_subset = lam_subset.assign(
-    n2=help.apply_brunt_vaisala_frequency(lam_subset, altdim=altdim, q="qv")
+    n2=apply_brunt_vaisala_frequency(lam_subset, altdim=altdim, q="qv")
 ).rename({"z": "altitude"})
 
 # %%
-ifs = ifs.assign(
-    rh=mtf.specific_humidity_to_relative_humidity(
-        q=ifs.q,
-        p=ifs.pressure,
-        T=ifs.t,
-        es=svp.liq_wagner_pruss,
-    ),
-    theta=mtf.theta(ifs.t, ifs.pressure),
-).rename({"t": "ta", "height": "altitude", "sonde_lat": "launch_lat"})
-ifs = ifs.assign(n2=help.apply_brunt_vaisala_frequency(ifs, altdim="altitude", q="q"))
 
 beach = beach.assign(
-    n2=help.apply_brunt_vaisala_frequency(beach, altdim="altitude", q="q"),
+    n2=apply_brunt_vaisala_frequency(beach, altdim="altitude", q="q"),
     ice_rh=mtf.specific_humidity_to_relative_humidity(
         q=beach.q,
         p=beach.p,
@@ -200,22 +262,13 @@ beach = beach.assign(
     ),
 ).reset_coords(["launch_lat", "launch_lon"])
 
-gate = gate.assign(
-    n2=help.apply_brunt_vaisala_frequency(gate, altdim="altitude", q="q"),
-    ice_rh=mtf.specific_humidity_to_relative_humidity(
-        q=gate.q,
-        p=gate.p,
-        T=gate.ta,
-        es=svp.ice_wagner_etal,
-    ),
-)
 # %%
 Px = 100900.0
 P = np.arange(Px, 4000.0, -500)
 T2 = 301
 q2 = 0.018  # 9182267570514704
 
-pseudo2 = help.make_sounding_from_adiabat(P, T2, q2, thx=mtf.theta_e_bolton, Tmin=195)
+pseudo2 = make_sounding_from_adiabat(P, T2, q2, thx=mtf.theta_e_bolton, Tmin=195)
 pseudo = pseudo2.assign(
     q=mtf.relative_humidity_to_specific_humidity(
         RH=beach.mean("sonde").rh.interp(altitude=pseudo2.altitude),
@@ -241,16 +294,14 @@ ice_histograms = {}
 n2_hist = {}
 for ds, name in [
     (lam_subset, "lam-total"),
-    (ifs, "ifs-total"),
     (beach, "beach-total"),
-    (dh.sel_sub_domain(beach, dh.gate_a), "beach-gate"),
-    (dh.sel_sub_domain(beach, dh.east), "beach-east"),
-    (dh.sel_sub_domain(beach, dh.west), "beach-west"),
-    (dh.sel_sub_domain(beach, dh.north), "beach-north"),
-    (dh.sel_sub_domain(gate, dh.gate_a), "gate"),
-    (dh.sel_sub_domain(lam_subset, dh.east), "lam-east"),
-    (dh.sel_sub_domain(lam_subset, dh.west), "lam-west"),
-    (dh.sel_sub_domain(lam_subset, dh.north), "lam-north"),
+    #    (dh.sel_sub_domain(beach, dh.gate_a), "beach-gate"),
+    #   (dh.sel_sub_domain(beach, dh.east), "beach-east"),
+    #    (dh.sel_sub_domain(beach, dh.west), "beach-west"),
+    #    (dh.sel_sub_domain(beach, dh.north), "beach-north"),
+    #    (dh.sel_sub_domain(lam_subset, dh.east), "lam-east"),
+    #    (dh.sel_sub_domain(lam_subset, dh.west), "lam-west"),
+    #    (dh.sel_sub_domain(lam_subset, dh.north), "lam-north"),
 ]:
     ds = ds.sortby("altitude").sel(altitude=slice(0, 14000))
     rh_histograms[name] = histogram(
@@ -291,8 +342,9 @@ kwargs = dict(
 
 levels = [0, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.035]
 sns.set_context("talk", font_scale=0.9)
-fig, ax = plt.subplots(figsize=(6, 5.5))
-cax = make_axes_locatable(ax).append_axes("right", size="5%", pad=0.6)
+fig, axes = plt.subplots(figsize=(13, 5.5), ncols=2)
+cax = make_axes_locatable(axes[0]).append_axes("right", size="5%", pad=0.6)
+cax2 = make_axes_locatable(axes[1]).append_axes("right", size="5%", pad=0.6)
 
 region = "total"
 for name, label in [(f"lam-{region}", "ICON"), (f"beach-{region}", "Dropsondes")]:
@@ -329,24 +381,25 @@ for name, label in [(f"lam-{region}", "ICON"), (f"beach-{region}", "Dropsondes")
     """
     p = fct(
         y="ta_bin",
-        ax=ax,
+        ax=axes[0],
         levels=levels,
         **kwargs[name.split("-")[0]]["contour"],
     )
 
     (plthist * plthist.rh_bin).sum("rh_bin").sel(ta_bin=slice(None, 303)).plot(
         y="ta_bin",
-        ax=ax,
+        ax=axes[0],
         label=label,
         **kwargs[name.split("-")[0]]["line"],
     )
 
     #
     cbar = fig.colorbar(p, cax=cax)
-cbar.ax.tick_params(labelsize=8)
-
-ax.text(1.05, 250, "RH wrt ice", rotation=90, va="center", color="black", fontsize=16)
-ax.text(
+cbar.ax.tick_params(labelsize=12)
+axes[0].text(
+    1.05, 250, "RH wrt ice", rotation=90, va="center", color="black", fontsize=16
+)
+axes[0].text(
     1.02,
     290,
     "RH wrt \nliquid water",
@@ -356,17 +409,59 @@ ax.text(
     fontsize=16,
 )
 # cax.set_visible(False)
-ax.invert_yaxis()
-ax.set_xlim(0, 1)
-ax.set_ylim(305, 220)
-ax.legend(loc=3)
+axes[0].set_xlim(0, 1)
+axes[0].set_ylim(305, 220)
+axes[0].legend(loc=3)
 
-ax.set_yticks([300, 280, 260, 240, 220])
-ax.set_ylabel("Temperature / K")
-ax.set_xlabel("Relative Humidity / 1")
+axes[0].set_yticks([300, 280, 260, 240, 220])
+axes[0].set_xlabel("Relative Humidity / 1")
+
+# N2 plot
+levels = [0, 0.02, 0.04, 0.08, 0.1, 0.12]
+for name, label in [(f"lam-{region}", "ICON"), (f"beach-{region}", "Dropsondes")]:
+    plthist = (
+        n2_hist[name]
+        .rolling(ta_bin=5, center=True, min_periods=3)
+        .sum()
+        .where(n2_hist[name] > 0)
+    )
+    plthist = (plthist / plthist.sum("n2_bin")).sel(ta_bin=slice(260, 295))
+
+    if "beach" in name:
+        fct = plthist.plot.contour
+    else:
+        fct = plthist.plot.contourf
+
+    p = fct(
+        y="ta_bin",
+        ax=axes[1],
+        levels=levels,
+        **kwargs[name.split("-")[0]]["contour"],
+    )
+    (plthist * plthist.n2_bin).sum("n2_bin").sel(ta_bin=slice(None, 303)).plot(
+        y="ta_bin",
+        ax=axes[1],
+        label=label,
+        **kwargs[name.split("-")[0]]["line"],
+    )
+    cbar = fig.colorbar(p, cax=cax2)
+cbar.ax.tick_params(labelsize=12)
+
+axes[1].set_xlabel("Brunt Väisälä Frequency ($N^2$) / s$^{-2}$")
+axes[1].invert_yaxis()
+axes[1].set_xticks([0.005, 0.01, 0.015])
+axes[1].set_xlim(0.005, 0.018)
+axes[1].set_ylim(295, 260)
+axes[1].plot(n2_pseudo, pseudo.T, color="black", linewidth=4, label="Pseudo-adiabat")
+axes[1].legend(bbox_to_anchor=(0.35, 1.05), framealpha=0.9)
+axes[1].set_yticks([295, 285, 275, 265])
+for ax in axes:
+    ax.axhline(273.15, color="gray", linestyle="--")
+    ax.set_ylabel("Temperature / K")
 sns.despine(offset={"bottom": 10})
 sns.despine(ax=cax, bottom=True)
-ax.axhline(273.15, color="gray", linestyle="--")
+sns.despine(ax=cax2, bottom=True)
+
 fig.tight_layout()
 fig.savefig("/scratch/m/m301046/rh_ice_liq_hist_total.pdf", transparent=True)
 
@@ -537,13 +632,10 @@ ax.axhline(273.15, color="gray", linestyle="--")
 fig.tight_layout()
 # fig.savefig("/scratch/m/m301046/n2_hist_total.pdf", transparent=True)
 
-
-# %%
-
 # %%
 sns.set_context("talk", font_scale=0.9)
 fig, axes = plt.subplots(figsize=(17, 5.5), ncols=3, sharex=True, sharey=True)
-cax = make_axes_locatable(axes[-1]).append_axes("right", size="5%", pad=0.55)
+# cax = make_axes_locatable(axes[-1]).append_axes("right", size="5%", pad=0.55)
 
 levels = [0, 0.02, 0.04, 0.08, 0.1, 0.12]
 for ax, region in zip(axes, ["east", "west", "north"]):
@@ -560,6 +652,8 @@ for ax, region in zip(axes, ["east", "west", "north"]):
             fct = plthist.plot.contour
         else:
             fct = plthist.plot.contourf
+        """
+        """
         p = fct(
             y="ta_bin",
             ax=ax,
@@ -575,29 +669,49 @@ for ax, region in zip(axes, ["east", "west", "north"]):
         )
 
         #
-        cbar = fig.colorbar(p, cax=cax)
-cbar.ax.tick_params(labelsize=8)
+        # cbar = fig.colorbar(p, cax=cax)
+# cbar.ax.tick_params(labelsize=8)
 
 # plt settings
 
-axes[0].legend(loc=2)
 ax.invert_yaxis()
 for ax in axes:
     ax.set_xticks([0.005, 0.01, 0.015])
-    ax.set_xlim(0.003, 0.017)
+    ax.set_xlim(0.005, 0.018)
     ax.plot(n2_pseudo, pseudo.T, color="black", linewidth=4, label="Pseudo-adiabat")
     ax.set_xlabel("Brunt Väisälä Frequency ($N^2$) / s$^{-2}$")
-    ax.axhline(273.15, color="gray", linestyle="--")
-
+    ax.axhline(273.15, color="gray", linestyle=":", alpha=0.5)
     ax.set_ylabel("")
+for ax, temp in zip(axes, [269, 272, 265]):
+    label = "Cloud Top Temperature"
+    ax.axhline(temp, color="gray", linestyle="-", label=label)
 axes[0].set_ylim([295, 260])
 axes[0].set_ylabel("Temperature / K")
+axes[0].legend(loc=2)
 sns.despine(offset=10)
 sns.despine(ax=cax, bottom=True, left=True)
 fig.tight_layout()
-# fig.savefig("/scratch/m/m301046/n2_plain_regions.pdf", transparent=True)
+
+fig.savefig("/scratch/m/m301046/n2_hist_regions.pdf", transparent=True)
 # %%
 
 # %%
 
 # %%
+"""
+ifs = xr.open_dataset(
+    "/work/mh0492/m301067/orcestra/results/timeseries/ifs_interpolated_on_dropsondes_profiles_2nd-days.nc"
+)
+
+ifs = ifs.assign(
+    rh=mtf.specific_humidity_to_relative_humidity(
+        q=ifs.q,
+        p=ifs.pressure,
+        T=ifs.t,
+        es=svp.liq_wagner_pruss,
+    ),
+    theta=mtf.theta(ifs.t, ifs.pressure),
+).rename({"t": "ta", "height": "altitude", "sonde_lat": "launch_lat"})
+ifs = ifs.assign(n2=help.apply_brunt_vaisala_frequency(ifs, altdim="altitude", q="q"))
+
+"""
