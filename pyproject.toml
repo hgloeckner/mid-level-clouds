@@ -11,6 +11,7 @@ dependencies = [
     "cmocean",
     "cython",
     "easygems",
+    "eurec4a>=0.0.6",
     "flox",
     "fsspec",
     "intake<2",
