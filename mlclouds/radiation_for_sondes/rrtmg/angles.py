@@ -25,6 +25,7 @@ def get_hour_from_time(time):
 def get_h(time):
     # get hour angle from datetime64 time
     hour = get_hour_from_time(time)
+    assert hour >= 0 and hour < 24
     return 15 * (12 - hour)
 
 
@@ -35,12 +36,19 @@ def get_local_time(time, lat, lon):
 
 
 def cos_zenith_angle(time, lat, lon):
+    print(time)
     local_time = get_local_time(time, lat, lon)
-
+    print(local_time)
     declination = declination_angle_model(datetime_to_day(local_time))
+    print("declination", declination)
+    print("h", get_h(local_time))
     h = np.deg2rad(get_h(local_time))
     lat = np.deg2rad(lat)
-
-    return np.sin(lat) * np.sin(declination) + np.cos(lat) * np.cos(
-        declination
-    ) * np.cos(h)
+    print("cos h", np.cos(h))
+    print("cos lat", np.cos(lat))
+    print("sin lat", np.sin(lat))
+    mu = np.sin(lat) * np.sin(declination) + np.cos(lat) * np.cos(declination) * np.cos(
+        h
+    )
+    print(mu)
+    return mu
