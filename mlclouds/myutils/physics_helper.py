@@ -68,16 +68,63 @@ def get_n2(th, qv, altdim="altitude"):
     return np.sqrt(g * (dlnthdz + (Rv - Rd) * dqvdz / R))
 
 
+def specific_humidity2vmr(q):
+    r"""Convert specific humidity to volume mixing ratio.
+
+    .. math::
+        x = \frac{q}{(1 - q) \frac{M_w}{M_d} + q}
+
+    Parameters:
+        q (float or ndarray): Specific humidity.
+
+    Returns:
+        float or ndarray: Volume mixing ratio.
+
+    Examples:
+        >>> specific_humidity2vmr(0.02)
+        0.03176931009073226
+    """
+    Md = mtc.md
+    Mw = mtc.molar_mass_h2o
+
+    return q / ((1 - q) * Mw / Md + q)
+
+
+def vmr2specific_humidity(x):
+    r"""Convert volume mixing ratio to specific humidity.
+
+    .. math::
+        q = \frac{x}{(1 - x) \frac{M_d}{M_w} + x}
+
+    Parameters:
+        x (float or ndarray): Volume mixing ratio.
+
+    Returns:
+        float or ndarray: Specific humidity.
+
+    Examples:
+        >>> vmr2specific_humidity(0.04)
+        0.025261087474946833
+    """
+    Md = mtc.md
+    Mw = mtc.molar_mass_h2o
+
+    return x / ((1 - x) * Md / Mw + x)
+
+
 def get_csc_stab(rho, stability, H):
     grad_stability = stability.differentiate("altitude") * 1000
-    cp = mtc.cpv
-    return 1 / (cp * rho * stability) * (H / stability * grad_stability)
+    return 1 / (stability) * (H / stability * grad_stability)
 
 
 def get_csc_cooling(rho, stability, H):
     grad_H = H.differentiate("altitude") * 1000
+    return -1 / (stability) * grad_H
+
+
+def mass_flux(stability, H):
     cp = mtc.cpv
-    return -1 / (cp * rho * stability) * grad_H
+    return H / (cp * stability)
 
 
 def density_from_q(p, T, q):

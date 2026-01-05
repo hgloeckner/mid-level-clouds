@@ -1,0 +1,17 @@
+name: pyRTE
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - intake-xarray<2
+  - intake<2
+  - jupyterlab
+  - matplotlib
+  - numpy
+  - pyrte_rrtmgp
+  - scipy
+  - xarray
+  - zarr
+  - pip
+  - pip:
+    - ipfsspec
