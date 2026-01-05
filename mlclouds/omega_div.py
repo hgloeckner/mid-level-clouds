@@ -421,4 +421,4 @@ fig.colorbar(
     shrink=0.5,
 )
 
-# fig.savefig("/scratch/m/m301046/omega_cloudtype.pdf")
+fig.savefig("/scratch/m/m301046/omega_cloudtype.pdf")
