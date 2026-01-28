@@ -148,6 +148,13 @@ def find_highest_cloud_altitude(
 ):
     ds = ds.sortby(altdim)  # .chunk({"altitude": -1, "time": 1000})
     mask = ds[variable_name] >= threshold
+    ds = (
+        ds[variable_name]
+        .where(mask)
+        .chunk({"altitude": -1})
+        .interpolate_na(dim=altdim, max_gap=4)
+    )
+    mask = ds >= threshold
     mask_inv = mask.isel({altdim: slice(None, None, -1)})
 
     highest_altitude = ds[altdim].values[
