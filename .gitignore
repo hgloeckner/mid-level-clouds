@@ -43,7 +43,7 @@ _version.py
 **/cache/
 not_git/
 static/
-
+**/*.out
 **/playground.py
 env
 **/.env
