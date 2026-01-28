@@ -2,6 +2,7 @@ import xarray as xr
 import numpy as np
 import hashlib
 import intake
+from zarr.codecs import BloscCodec
 
 
 def hash_xr_var(da):
@@ -117,3 +118,12 @@ def get_cid():
 
 def get_gate_cid():
     return "QmeAFUdB3PZHRtCd441HjRGZPmEadtskXsnL34C9xigH3A"
+
+
+def write_ds(ds, path):
+    compressor = BloscCodec(cname="zstd", clevel=3, shuffle="shuffle")
+    ds.to_zarr(
+        path,
+        mode="w",
+        encoding={var: {"compressor": compressor} for var in ds.variables},
+    )
