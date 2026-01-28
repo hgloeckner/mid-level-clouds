@@ -5,34 +5,6 @@ import moist_thermodynamics.functions as mtf
 import xarray as xr
 
 
-def get_freezing_levels(ds, vars=None):
-    if vars is None:
-        vars = ["rh", "u", "v", "tv", "mse", "vmse", "umse"]
-
-    swap_d = ds.swap_dims({"sonde": "sonde_id"})
-    indices = (
-        (np.abs(swap_d.ta.interpolate_na(dim="altitude") - 273.15))
-        .dropna(dim="sonde_id", how="all")
-        .argmin(dim="altitude")
-    )
-
-    for variable in vars:
-        d = []
-        varlist = []
-        for sonde_id in swap_d.sonde_id:
-            try:
-                alt = ds.altitude[indices.sel(sonde_id=sonde_id)].values
-                d.append(alt)
-            except KeyError:
-                d.append(np.nan)
-                varlist.append(np.nan)
-            else:
-                varlist.append(swap_d.sel(altitude=alt, sonde_id=sonde_id)[variable])
-        swap_d = swap_d.assign({f"freezing_{variable}": (("sonde_id"), varlist)})
-    swap_d = swap_d.assign(freezing_level=(("sonde_id"), d))
-    return swap_d.swap_dims({"sonde_id": "sonde"})
-
-
 def calc_Tv(T, mr):
     """
     Calculate the virtual temperature (Tv) from temperature (T) and mixing ratio (mr).
@@ -122,15 +94,22 @@ def get_csc_cooling(rho, stability, H):
     return -1 / (stability) * grad_H
 
 
-def mass_flux(stability, H):
-    cp = mtc.cpv
-    return H / (cp * stability)
+def mass_flux(rho, stability, H):
+    return rho * H / (stability)
 
 
 def density_from_q(p, T, q):
     Rd = mtc.dry_air_gas_constant
     Rv = mtc.water_vapor_gas_constant
     return p / ((Rd + (Rv - Rd) * q) * T)
+
+
+def calc_heating_rate_from_flx(flx_up, flx_down, p):
+    cp = mtc.cpd
+    g = mtc.gravity_earth
+    flx = flx_up - flx_down
+    htg = g / cp * np.diff(flx, axis=-1) / np.diff(p, axis=-1)
+    return np.insert(htg, -1, htg[-1])
 
 
 def wv2q(wv):
