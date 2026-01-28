@@ -47,7 +47,9 @@ def uniform_humidity(ds, zlcl, ztoa, rh, es=mtf.es_default):
     return qrh.ffill(dim="altitude").bfill(dim="altitude")
 
 
-def cshape_humidity(ds, zlcl, rhmid, rhlcl, rhtoa, Tmin=260, es=mtf.es_default):
+def cshape_humidity(
+    ds, zlcl, rhmid, rhlcl, rhtoa, Tmin=260, es=mtf.es_default, **kwargs
+):
     rh = xr.DataArray(
         np.full_like(ds.T.values, np.nan),
         dims=("altitude",),
@@ -62,7 +64,18 @@ def cshape_humidity(ds, zlcl, rhmid, rhlcl, rhtoa, Tmin=260, es=mtf.es_default):
     return qrh.ffill(dim="altitude").bfill(dim="altitude")
 
 
-def wshape_humidity(ds, zlcl, rhmid, rhlcl, rhtoa, Tmin=260, es=mtf.es_default):
+def wshape_humidity(
+    ds,
+    zlcl,
+    rhmid,
+    rhlcl,
+    rhtoa,
+    lowlim=280,
+    highlim=265,
+    factor=0.5,
+    Tmin=260,
+    es=mtf.es_default,
+):
     rh = xr.DataArray(
         np.full_like(ds.T.values, np.nan),
         dims=("altitude",),
@@ -73,8 +86,8 @@ def wshape_humidity(ds, zlcl, rhmid, rhlcl, rhtoa, Tmin=260, es=mtf.es_default):
     rh[np.abs(ds.T - Tmin).argmin()] = rhmid
     rh[np.abs(ds.altitude - zlcl).argmin()] = rhlcl
     rh = rh.interpolate_na("altitude", method="quadratic")
-    rh = rh.where((ds.T <= 265) | (ds.T >= 280))
-    rh[np.abs(ds.T - 273.15).argmin()] = (rhmid + rhlcl) / 2
+    rh = rh.where((ds.T <= highlim) | (ds.T >= lowlim))
+    rh[np.abs(ds.T - 273.15).argmin()] = (rhmid + rhlcl) * factor
     rh = rh.interpolate_na("altitude", method="quadratic")
     qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.P, ds.T, es=es)
     return qrh.ffill(dim="altitude").bfill(dim="altitude")
