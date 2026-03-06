@@ -11,6 +11,7 @@ dependencies:
   - pyrte_rrtmgp
   - scipy
   - xarray
+  - xhistogram
   - zarr
   - pip
   - pip:

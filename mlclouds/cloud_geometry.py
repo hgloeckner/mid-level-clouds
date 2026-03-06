@@ -17,13 +17,15 @@ import cartopy.feature as cf
 import matplotlib as mpl
 
 regions = {
-    "north": dh.north,
-    "east": dh.east,
     "west": dh.west,
+    "east": dh.east,
+    "north": dh.north,
 }
+
+
 # %%
 
-wv, no_wv = od.open_wales(masked=False)
+wv, no_wv = od.open_wales(masked=False, local=True)
 
 cid = "ipns://latest.orcestra-campaign.org"  # open_datasets.get_cid()
 dropsondes = xr.open_dataset(
@@ -69,6 +71,13 @@ radar["full"] = radar["full"].assign_coords(
 wales["full"] = wales["full"].assign_coords(
     time=no_wv.time, longitude=no_wv.longitude, latitude=no_wv.latitude
 )
+# %%
+sradar = {}
+shipradar = xr.open_dataset(
+    "ipfs://bafybeiakgiqypaykbbyxxaesqxz2g4kjwjactcpvju2tjutztm5hpxl2km", engine="zarr"
+).set_coords(["time", "latitude", "longitude"])
+sradar["full"] = shipradar.cloud_top_height_agl.rename("cloud-top")
+
 # %%
 sns.set_context("paper", font_scale=1.3)
 fig, ax = plt.subplots(figsize=(8, 5))
@@ -165,7 +174,7 @@ ax.legend()
 ax.set_ylim(0, 14000)
 ax.set_ylabel("Cloud Top Altitude / m")
 fig.tight_layout()
-fig.savefig("plots/cloud_top_altitude_distribution.pdf")
+fig.savefig("../plots/cloud_top_altitude_distribution.pdf")
 fig.savefig(
     "/scratch/m/m301046/cloud_top_altitude_distribution_mean.pdf", transparent=True
 )
@@ -209,22 +218,81 @@ for region, height in zip(
         "K",
     )
 """
+
+# %% compare radar/lidar and ship
+colors = {
+    "halo-color": "teal",
+    "ship-color": "darkblue",
+}
+
+kdekwargs = {
+    "fill": False,
+    "linewidth": 2,
+    "y": "cloud-top",
+}
+altlim = 10000
+
+fig, axes = plt.subplots(ncols=3, figsize=(12, 5), sharex=True, sharey=True)
+for idx, (regname, region) in enumerate(regions.items()):
+    plt_ds_wales = dh.sel_sub_domain(
+        wales["full"].where(wales["full"] < altlim),
+        region,
+        item_var="time",
+        lon_var="longitude",
+        lat_var="latitude",
+    )
+    plt_ds_radar = dh.sel_sub_domain(
+        radar["full"].where(radar["full"] < altlim),
+        region,
+        item_var="time",
+        lon_var="longitude",
+        lat_var="latitude",
+    )
+    plt_ds_ship = dh.sel_sub_domain(
+        sradar["full"].where(sradar["full"] < altlim),
+        region,
+        item_var="time",
+        lon_var="longitude",
+        lat_var="latitude",
+    )
+    sns.kdeplot(
+        plt_ds_wales.drop_vars(["latitude", "longitude"]).to_dataframe().dropna(),
+        color=colors["halo-color"],
+        label="HALO Lidar",
+        linestyle=":",
+        ax=axes[idx],
+        **kdekwargs,
+    )
+    sns.kdeplot(
+        plt_ds_radar.drop_vars(["latitude", "longitude"]).to_dataframe().dropna(),
+        color=colors["halo-color"],
+        linestyle="-",
+        label=" HALO Radar",
+        ax=axes[idx],
+        **kdekwargs,
+    )
+    sns.kdeplot(
+        plt_ds_ship.drop_vars(["latitude", "longitude"]).to_dataframe().dropna(),
+        color=colors["ship-color"],
+        linestyle="-",
+        label="Meteor Radar",
+        ax=axes[idx],
+        **kdekwargs,
+    )
+    axes[idx].set_title(f" {regname.capitalize()}")
+    axes[idx].set_ylabel("")
+    axes[idx].set_xlabel("Density")
+axes[1].legend()
+axes[0].set_xlim(0, 0.0004)
+axes[0].set_ylim(0, 10000)
+axes[0].set_ylabel("Cloud Top Altitude / m")
+sns.despine()
+fig.tight_layout()
+fig.savefig("../plots/cth_by_region.pdf")
 # %% cloud top map plot
 
-
-norm = mpl.colors.BoundaryNorm(
-    boundaries=(0, 4000, 6000, 8000, 15000),
-    ncolors=4,
-)
-cmap = mpl.colors.ListedColormap(
-    ["#E2E1E2", "#FFC929", "#FF7E15", "#383637"]
-)  # "twilight"#
-cm = 1 / 2.54  # centimeters to inches
-cw = 20 * cm
-fig, axes = plt.subplots(
-    ncols=2, figsize=(cw, cw * 0.5), subplot_kw={"projection": ccrs.Robinson()}
-)
-
+path = ("/scratch/m/m301046/wales_radar_cloud_top_max.zarr",)
+"""
 rcoars = radar["full"].reset_coords().resample(time="2S").nearest(tolerance="1S")
 wcoars = (
     wales["full"]
@@ -244,25 +312,52 @@ coars = xr.DataArray(
     longitude=rcoars.longitude,
     latitude=rcoars.latitude,
 )
+coars.to_zarr(
+    path,
+    mode="w",
+    zarr_format=2,
+)
 
-regions = {
-    "east": dh.east,
+"""
+
+path = (
+    "/Users/helene/Documents/code/mid_level_clouds/plots/wales_radar_cloud_top_max.zarr"
+)
+
+coars = xr.open_dataset(path)
+# %% map of cloud top max
+norm = mpl.colors.BoundaryNorm(
+    boundaries=(0, 4000, 6000, 8000, 15000),
+    ncolors=4,
+)
+cmap = mpl.colors.ListedColormap(
+    ["#E2E1E2", "#FFC929", "#FF7E15", "#383637"]
+)  # "twilight"#
+cm = 1 / 2.54  # centimeters to inches
+cw = 20 * cm
+fig, axes = plt.subplots(
+    ncols=2, figsize=(cw, cw * 0.5), subplot_kw={"projection": ccrs.Robinson()}
+)
+
+regions_plt = {
     "west": dh.west,
+    "east": dh.east,
 }
 
-for idx, (name, region) in enumerate(regions.items()):
+for idx, (name, region) in enumerate(regions_plt.items()):
     plt_ds = dh.sel_sub_domain(
         coars, region, lat_var="latitude", lon_var="longitude", item_var="time"
     )
     p = axes[idx].scatter(
         plt_ds.longitude,
         plt_ds.latitude,
-        c=plt_ds,
+        c=plt_ds["cloud-top"],
         transform=ccrs.PlateCarree(),
         alpha=0.5,
         s=0.5,
         cmap=cmap,
         norm=norm,
+        rasterized=True,
     )
 fig.subplots_adjust(right=0.9)
 cbar_ax = fig.add_axes([0.95, 0.3, 0.02, 0.4])
@@ -270,14 +365,49 @@ fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
 
 for ax in axes:
     ax.add_feature(cf.COASTLINE, linewidth=0.5)
-fig.savefig("/scratch/m/m301046/cloud_top_map_max.pdf")
-# %%
-coars.to_zarr(
-    "/scratch/m/m301046/wales_radar_cloud_top_max.zarr",
-    mode="w",
-    zarr_format=2,
+fig.savefig(
+    "/Users/helene/Documents/code/mid_level_clouds/plots/cloud_top_map_max.pdf",
+    dpi=300,
+    bbox_inches="tight",
 )
 # %%
+fig.savefig("/scratch/m/m301046/cloud_top_map_max.pdf")
+
+# %%
+fig, ax = plt.subplots(
+    figsize=(cw, cw * 0.5), subplot_kw={"projection": ccrs.Robinson()}
+)
+plt_ds = sradar["full"]
+p = ax.scatter(
+    plt_ds.longitude,
+    plt_ds.latitude,
+    c=plt_ds,
+    transform=ccrs.PlateCarree(),
+    alpha=0.5,
+    s=2,
+    marker="x",
+    cmap=cmap,
+    norm=norm,
+    rasterized=True,
+)
+for region in regions.values():
+    coord = region.copy()
+    coord.append(coord[0])
+    lons, lats = zip(*coord)
+    ax.plot(
+        lons,
+        lats,
+        transform=ccrs.PlateCarree(),
+        color="k",
+        linewidth=1,
+    )
+
+fig.subplots_adjust(right=0.9)
+cbar_ax = fig.add_axes([0.95, 0.3, 0.02, 0.4])
+fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+ax.add_feature(cf.COASTLINE, linewidth=0.5)
+# fig.savefig("../plots/cth-meteor-map.pdf", dpi=300, bbox_inches='tight')
+# %% one day radar and wales
 
 date = "2024-08-21"
 dw = no_wv.sortby("altitude").sel(time=date).bsrgl.load()
@@ -290,8 +420,6 @@ dd = rdata.sortby("altitude").sel(time=date, altitude=slice(200, None))
 
 dsdate = dropsondes.swap_dims({"sonde": "launch_time"}).sel(launch_time=date)
 
-
-# %% one day radar and wales
 
 fig, axes = plt.subplots(nrows=3, sharex=True, sharey=True, figsize=(12, 8))
 
