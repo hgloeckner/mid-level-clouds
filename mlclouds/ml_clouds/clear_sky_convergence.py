@@ -17,9 +17,10 @@ from radiation_for_sondes.rrtmg import angles
 import radiation_for_sondes.rrtmg.rad_helper as rad
 
 # %%
-rrtmg_fluxes = xr.open_dataset(
-    "/scratch/m/m301046/rrtmgp_sonde_fluxes.zarr", engine="zarr"
-)
+file_path = "/Users/helene/Documents/code/mid_level_clouds/plots/"  # "/scratch/m/m301046/rrtmgp_sonde_fluxes.zarr"
+
+
+rrtmg_fluxes = xr.open_dataset(file_path + "rrtmgp_sonde_fluxes.zarr", engine="zarr")
 
 beach = (
     od.open_dropsondes(od.get_cids()["dropsondes"])
@@ -29,15 +30,11 @@ beach = (
 
 # %%
 
-wct = xr.open_dataset(
-    "/scratch/m/m301046/wales_radar_cloud_top_max.zarr", engine="zarr"
-)
+wct = xr.open_dataset(file_path + "wales_radar_cloud_top_max.zarr", engine="zarr")
 
 beach = beach.assign(cth=wct["cloud-top"].sel(time=beach.launch_time, method="nearest"))
 # %%
-rrtmg_fluxes = xr.open_dataset(
-    "/scratch/m/m301046/rrtmgp_sonde_fluxes.zarr", engine="zarr"
-)
+
 rrtmg_fluxes = rrtmg_fluxes.assign(
     lw_htgr=xr.apply_ufunc(
         ph.calc_heating_rate_from_flx,
@@ -201,21 +198,6 @@ ax.set_xlabel("Heating Rate / K day$^{-1}$")
 ax.set_ylabel("Temperature / K")
 ax.legend()
 
-# %%
-
-
-def calc_cs_convergence(ds, ta_var="ta"):
-    res = {}
-    res["stab"] = ph.get_stability(ds.theta, ds[ta_var]).rolling(altitude=5).mean()
-    res["rho"] = ph.density_from_q(ds.p, ds[ta_var], ds.q)
-    res["csc_stab"] = ph.get_csc_stab(
-        res["rho"], res["stab"], -ds.lw_htgr.rolling(altitude=5, center=True).mean()
-    )
-    res["csc_cool"] = ph.get_csc_cooling(
-        res["rho"], res["stab"], -ds.lw_htgr.rolling(altitude=5, center=True).mean()
-    )
-    return res
-
 
 # %%
 def get_data(key):
@@ -263,77 +245,6 @@ ax.set_ylim(0, 15000)
 ax.set_xlim(-2, 2)
 # %%
 
-# lstab = r"CSC$_{\frac{{\partial S}}{{\partial z}}}$"
-# lcool = r"CSC$_{\frac{{\partial \mathcal{{H}}}}{{\partial z}}}$"
-cm = 1 / 2.54
-cw = 20 * cm
-fig, axes = plt.subplots(
-    ncols=3,
-    nrows=2,
-    figsize=(cw, cw),
-    sharey=True,
-)
-
-for idx, (ls, key) in enumerate(
-    zip(["--", ":", "-"], ["Clear Sky", "CTH < 4 km", "CTH 4-8 km"])
-):
-    ds = data[key]
-
-    csc = calc_cs_convergence(ds)
-
-    axes[0, 0].plot(
-        -ds.lw_htgr.isel(altitude=slice(0, 130)) * 3600 * 24,
-        ds.ta.isel(altitude=slice(0, 130)),
-        color="k",
-        ls=ls,
-        label=key,
-    )
-
-    axes[0, 1].plot(
-        csc["stab"].isel(altitude=slice(0, 130)),
-        ds.ta.isel(altitude=slice(0, 130)),
-        color="k",
-        ls=ls,
-    )
-
-    axes[1, idx].plot(
-        csc["csc_stab"] * 3600 * 24,
-        ds.ta,
-        color="C1",
-    )
-    axes[1, idx].plot(
-        csc["csc_cool"] * 3600 * 24,
-        ds.ta,
-        color="C0",
-    )
-    axes[1, idx].plot(
-        (csc["csc_cool"] + csc["csc_stab"]) * 3600 * 24, ds.ta, color="k", label=key
-    )
-    axes[0, 2].plot(
-        (csc["csc_cool"] + csc["csc_stab"]) * 3600 * 24, ds.ta, color="k", ls=ls
-    )
-axes[0, 0].legend()
-axes[0, 0].set_xlabel("LW Heating Rate / K day$^{-1}$")
-axes[0, 1].set_xlabel("Stability / K m$^{-1}$")
-axes[0, 0].set_ylabel("Temperature / K")
-axes[1, 0].set_ylabel("Temperature / K")
-axes[0, 1].invert_yaxis()
-axes[0, 1].set_ylim(280, 260)
-axes[0, 1].set_xlim(2.5, 5)
-axes[0, 0].set_xlim(1, 3.5)
-axes[0, 2].set_xlabel("LW Convergence / s$^{-1}$")
-axes[0, 2].set_xlim(-0.3, 0.2)
-axes[0, 2].axvline(0, color="grey", linestyle="-", alpha=0.5)
-for ax in axes[1, :]:
-    ax.axvline(0, color="grey", linestyle="-", alpha=0.5)
-    ax.set_xlabel("LW Convergence / s$^{-1}$")
-    ax.set_xlim(-0.4, 0.3)
-    ax.legend()
-for ax in axes.flatten():
-    ax.axhline(273.15, color="grey", linestyle="-", alpha=0.5)
-sns.despine(offset=10)
-fig.tight_layout()
-fig.savefig("/scratch/m/m301046/csc_lw_cth.pdf")
 # %%
 """
 todo:
@@ -347,7 +258,7 @@ todo:
 beachdata = {}
 raddata = {}
 radbeach = xr.open_dataset(
-    "/work/mh0066/m301046/ml_clouds/sondes_for_radiation.nc"
+    file_path + "sondes_for_radiation.nc"  # /work/mh0066/m301046/ml_clouds
 ).swap_dims({"sonde": "sonde_id"})
 
 beachdata["CTH < 4 km"] = beach.swap_dims({"sonde": "sonde_id"}).sel(
@@ -379,7 +290,11 @@ for key in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
     )  # 9182267570514704
 
     pseudo = ph.make_sounding_from_adiabat(
-        P, sfcT, qsfc, thx=mtf.theta_e_bolton, Tmin=195
+        P,
+        sfcT,
+        qsfc,
+        thx=mtf.theta_e,  # _bolton,
+        Tmin=195,
     )
     pseudo = xr.concat(
         [
@@ -529,6 +444,20 @@ ax.set_ylim(0, 20000)
 # ax.invert_yaxis()
 # ax.set_ylim(305, 220)
 sns.despine()
+fig.savefig(file_path + "rh_idealized_profiles.pdf")
+
+
+# %%
+q = qc["pseudo"]["CTH < 4 km"]
+atm = rad.make_atmosphere(
+    pseudo.P.values.reshape(1, pseudo.P.shape[0]),
+    pseudo.T.values.reshape(1, pseudo.P.shape[0]),
+    ph.specific_humidity2vmr(q).values.reshape(1, pseudo.P.shape[0]),
+    o3=radbeach.O3.interp(altitude=pseudo.altitude).values,
+)
+
+gas_optics_lw = GasOptics(gas_optics_file=GasOpticsFiles.LW_G256)
+op_lw = gas_optics_lw.compute(atm, add_to_input=False)
 
 
 # %%
@@ -616,34 +545,27 @@ res_pseudo = calc_radiation(qc["pseudo"], qe["pseudo"], qr["pseudo"], pseudos)
 # %%
 def calc_cs_convergence_sw(ds, ta_var="ta"):
     res = {}
-    res["stab"] = ph.get_stability(ds.theta, ds[ta_var]).rolling(altitude=5).mean()
+    res["stab"] = ph.get_stability(ds.theta, ds[ta_var])
     res["rho"] = ph.density_from_q(ds.p, ds[ta_var], ds.q)
     htgr = ds.lw_htgr + ds.sw_htgr.mean("mu0")
-    res["csc_stab"] = ph.get_csc_stab(
-        res["rho"], res["stab"], -htgr.rolling(altitude=5, center=True).mean()
-    )
-    res["csc_cool"] = ph.get_csc_cooling(
-        res["rho"], res["stab"], -htgr.rolling(altitude=5, center=True).mean()
-    )
-    res["lw_csc_stab"] = ph.get_csc_stab(
-        res["rho"], res["stab"], -ds.lw_htgr.rolling(altitude=5, center=True).mean()
-    )
-    res["lw_csc_cool"] = ph.get_csc_cooling(
-        res["rho"], res["stab"], -ds.lw_htgr.rolling(altitude=5, center=True).mean()
-    )
-    res["rho"] = ph.density_from_q(ds.p, ds[ta_var], ds.q)
-    res["mass_flux"] = ph.mass_flux(
-        res["rho"], res["stab"], -htgr.rolling(altitude=5, center=True).mean()
-    )
-    res["lw_mass_flux"] = ph.mass_flux(
-        res["rho"], res["stab"], -ds.lw_htgr.rolling(altitude=5, center=True).mean()
-    )
+    res["csc_stab"] = ph.get_csc_stab(res["rho"], res["stab"], -htgr)
+    res["csc_cool"] = ph.get_csc_cooling(res["rho"], res["stab"], -htgr)
+    res["lw_csc_stab"] = ph.get_csc_stab(res["rho"], res["stab"], -ds.lw_htgr)
+    res["lw_csc_cool"] = ph.get_csc_cooling(res["rho"], res["stab"], -ds.lw_htgr)
+    res["mass_flux"] = ph.mass_flux(res["rho"], res["stab"], htgr)
+    res["lw_mass_flux"] = ph.mass_flux(res["rho"], res["stab"], ds.lw_htgr)
+    htgr = ds.lw_htgr
+    res["csc_stab_lw"] = ph.get_csc_stab(res["rho"], res["stab"], -htgr)
+    res["csc_cool_lw"] = ph.get_csc_cooling(res["rho"], res["stab"], -htgr)
+    htgr = ds.lw_htgr + ds.sw_htgr.sel(mu0=12)
+    res["csc_stab_swmax"] = ph.get_csc_stab(res["rho"], res["stab"], -htgr)
+    res["csc_cool_swmax"] = ph.get_csc_cooling(res["rho"], res["stab"], -htgr)
     return res
 
 
 # %%
-def get_cooling_from_mass_flux(mass_flux, stability, rho):
-    return -mass_flux * stability / rho
+def get_heating_from_mass_flux(mass_flux, stability, rho):
+    return mass_flux * stability / rho
 
 
 res_key = "CTH > 8 km"
@@ -655,20 +577,20 @@ else:
 sns.set_palette("tab10")
 fig, axes = plt.subplots(figsize=(12, 4), ncols=3)
 for key, ls in zip(["C shape", "E shape", "Real"], ["--", ":", "-"]):
-    ds = res_pseudo[res_key][key].sel(column=0, altitude=slice(None, 12000))
+    ds = res_pseudo[res_key][key].sel(column=0, altitude=slice(None, 14500))
 
     csc = calc_cs_convergence_sw(ds)
     uniform_mass = np.full(
         ds.altitude.shape, csc[mass_var].sel(altitude=slice(1000, None)).mean().values
     )
-    idealized_cooling = get_cooling_from_mass_flux(
+    idealized_heating = get_heating_from_mass_flux(
         uniform_mass,
         csc["stab"],
         csc["rho"],
     )
 
     axes[0].plot(
-        uniform_mass * 3600 * 24,
+        uniform_mass * 3600 * 24 / 1000,
         ds.altitude,
         color="C0",
         linestyle=ls,
@@ -678,7 +600,7 @@ for key, ls in zip(["C shape", "E shape", "Real"], ["--", ":", "-"]):
     else:
         htgr = ds.lw_htgr * 3600 * 24
 
-    (csc[mass_var].sel(altitude=slice(1000, None)) * 3600 * 24).plot(
+    (csc[mass_var].sel(altitude=slice(1000, None)) * 3600 * 24 / 1000).plot(
         y="altitude",
         ax=axes[0],
         color="C1",
@@ -693,14 +615,14 @@ for key, ls in zip(["C shape", "E shape", "Real"], ["--", ":", "-"]):
         linestyle=ls,
     )
 
-    (idealized_cooling * 3600 * 24).plot(
+    (idealized_heating * 3600 * 24).plot(
         y="altitude",
         ax=axes[1],
         color="C0",
         linestyle=ls,
     )
 
-    (htgr - idealized_cooling * 3600 * 24).plot(  # + ds.sw_htgr.mean("mu0")
+    (htgr - idealized_heating * 3600 * 24).plot(  # + ds.sw_htgr.mean("mu0")
         y="altitude",
         ax=axes[2],
         label="residual",
@@ -709,7 +631,7 @@ for key, ls in zip(["C shape", "E shape", "Real"], ["--", ":", "-"]):
     )
 
     mean_htg = (
-        (htgr / 3600 / 24 - idealized_cooling)
+        (htgr / 3600 / 24 - idealized_heating)
         .sel(altitude=slice(1000, 6000))
         .mean()
         .values
@@ -826,8 +748,8 @@ res_real = calc_radiation(qc["real"], qe["real"], qr["real"], realmeans)
 
 
 # %%
-def get_cooling_from_mass_flux(mass_flux, stability, rho):
-    return -mass_flux * stability / rho
+def get_heating_from_mass_flux(mass_flux, stability, rho):
+    return mass_flux * stability / rho
 
 
 res_key = "CTH < 4 km"
@@ -844,10 +766,10 @@ else:
     label_comp = "including SW"
 sns.set_palette("tab10")
 fig, axs = plt.subplots(figsize=(12, 8), ncols=3, nrows=2, sharey=True, sharex="col")
-for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
+for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 30])):
     axes = axs[idx]
-    for key, ls in zip(["C shape", "E shape", "Real"], ["--", ":", "-"]):
-        ds = res[res_key][key].sel(column=0, altitude=slice(None, 12000))
+    for key, ls in zip(["C shape", "E shape", "Real"], [":", "-"]):
+        ds = res[res_key][key].sel(column=0, altitude=slice(None, 14500))
 
         csc = calc_cs_convergence_sw(ds)
         csc["stab"] = csc["stab"].rolling(altitude=roll, center=True).mean()
@@ -859,12 +781,12 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
             ds.altitude.shape,
             csc[mass_var].sel(altitude=slice(1000, None)).mean().values,
         )
-        idealized_cooling = get_cooling_from_mass_flux(
+        idealized_heating = get_heating_from_mass_flux(
             uniform_mass,
             csc["stab"],
             csc["rho"],
         )
-        idealized_cooling_comp = get_cooling_from_mass_flux(
+        idealized_heating_comp = get_heating_from_mass_flux(
             np.full(
                 ds.altitude.shape,
                 csc[mass_var_comp].sel(altitude=slice(1000, None)).mean().values,
@@ -874,7 +796,7 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
         )
 
         axes[0].plot(
-            uniform_mass * 3600 * 24,
+            uniform_mass * 3600 * 24 / 1000,
             ds.altitude,
             color="C0",
             linestyle=ls,
@@ -897,7 +819,7 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
                 .mean()
             )
 
-        (csc[mass_var].sel(altitude=slice(1000, None)) * 3600 * 24).plot(
+        (csc[mass_var].sel(altitude=slice(1000, None)) * 3600 * 24 / 1000).plot(
             y="altitude",
             ax=axes[0],
             color="C1",
@@ -911,21 +833,36 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
             color="C1",
             linestyle=ls,
         )
-
-        (idealized_cooling * 3600 * 24).plot(
+        """
+        htgr_comp.plot(
+            y="altitude",
+            ax=axes[1],
+            color="grey",
+            linestyle=ls,
+            label=label_comp,
+        )
+        (idealized_heating_comp*3600*24).plot(  #
+            y="altitude",
+            ax=axes[1],
+            color="C2",
+            linestyle=ls,
+            label=label_comp,
+        )
+        """
+        (idealized_heating * 3600 * 24).plot(
             y="altitude",
             ax=axes[1],
             color="C0",
             linestyle=ls,
         )
 
-        if key == "Real":
+        if key == "E shape":
             reslabel = label
             reslabel_comp = label_comp
         else:
             reslabel = None
             reslabel_comp = None
-        (htgr - idealized_cooling * 3600 * 24).plot(  # + ds.sw_htgr.mean("mu0")
+        (htgr - idealized_heating * 3600 * 24).plot(  # + ds.sw_htgr.mean("mu0")
             y="altitude",
             ax=axes[2],
             label=reslabel,
@@ -933,7 +870,7 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
             linestyle=ls,
         )
         (
-            htgr_comp - idealized_cooling_comp * 3600 * 24
+            htgr_comp - idealized_heating_comp * 3600 * 24
         ).plot(  # + ds.sw_htgr.mean("mu0")
             y="altitude",
             ax=axes[2],
@@ -943,7 +880,7 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
         )
 
         mean_htg = (
-            (htgr / 3600 / 24 - idealized_cooling)
+            (htgr / 3600 / 24 - idealized_heating)
             .sel(altitude=slice(1000, 6000))
             .mean()
             .values
@@ -960,63 +897,176 @@ for idx, (res, roll) in enumerate(zip([res_pseudo, res_real], [1, 50])):
             "energy 1-6km",
             (dp.values * 10) * mean_htg * mtc.cpv,
         )  # J s-1
+        mean_htg_comp = (
+            (htgr_comp / 3600 / 24 - idealized_heating_comp)
+            .sel(altitude=slice(1000, 6000))
+            .mean()
+            .values
+        )
+        print(
+            "sw:",
+            not sw,
+            res_key,
+            key,
+            "energy 1-6km",
+            (dp.values * 10) * mean_htg_comp * mtc.cpv,
+        )  # J s-1
 
-    dH = (
-        -40
-        / 10
-        / mtc.cpv
-        / ((ds.p.interp(altitude=2500) - ds.p.interp(altitude=5000)) / 100)
+    Emelting = 10 * mtc.lf0 / (60 * 60 * 24)
+    dpmelt = (
+        ds.p.interp(altitude=[2500, 5000])[0] - ds.p.interp(altitude=[2500, 5000])[1]
     )
-    axes[1].axvline(
-        dH * 3600 * 24,
+    axes[2].axvline(
+        (Emelting * mtc.gravity_earth / dpmelt / 1005) * (60 * 60 * 24),
         1.7 / 10,
         4.4 / 10,
         color="grey",
+        alpha=0.5,
     )
 
 axes[0].set_xlabel("Mass Flux / kg m$^{-2}$ day$^{-1}$")
 axes[1].set_xlabel("$\\mathcal{{H}}$ / K day$^{-1}$")
-axes[1].set_xlim(-3.5, -0.5)
-axes[2].set_xlim(-1, 1)
+axes[1].set_xlim(-2.5, -0.5)
+axes[2].set_xlim(-1, 1.1)
 axes[2].set_xlabel("$\\Delta\\mathcal{{H}}$/ K day$^{-1}$")
 axes[2].legend()
 for ax in axs.flatten():
     ax.set_ylabel("")
     ax.set_title("")
+
 for ax in axs[:, 0]:
     ax.set_ylabel("altitude / m")
     ax.set_ylim(1000, 10000)
+    ax.set_xlim(-0.5, -0.1)
+
+
+ds = res_pseudo["CTH < 4 km"]["E shape"].sel(column=0)
+triple_alt_ideal = ds.altitude.isel(altitude=np.abs(ds.ta - 273.15).argmin()).values
+ds = res_real["CTH < 4 km"]["E shape"].sel(column=0)
+triple_alt_real = ds.altitude.isel(altitude=np.abs(ds.ta - 273.15).argmin()).values
+for ax in axs[0, :]:
+    ax.axhline(triple_alt_ideal, color="grey", linestyle="-", alpha=0.5)
+for ax in axs[1, :]:
+    ax.axhline(triple_alt_real, color="grey", linestyle="-", alpha=0.5)
 axs[0, 0].legend()
 # axs[0, 1].legend()
 for ax in axs[:, -1]:
     ax.axvline(0, color="grey", linestyle="-", alpha=0.5)
 sns.despine(offset={"left": 10})
-fig.savefig("/scratch/m/m301046/mlclouds/plots/mflux_mxd.pdf")
+fig.savefig(file_path + "mflux_mxd.pdf")
 
 # %%
-# %%
-res = res_real
-res_key = "CTH < 4 km"
+# %% plot CSC
+key = "CTH < 4 km"
+kwargs = {"y": "altitude"}
 
-for key, ls in zip(["C shape", "E shape", "Real"], ["--", ":", "-"]):
-    ds = res[res_key][key].sel(column=0, altitude=slice(None, 12000))
-    dH = (
-        -40 / 10 / mtc.cpv / ((ds.p.sel(altitude=2500) - ds.p.sel(altitude=5000)) * 100)
-    )
+fig, axs = plt.subplots(ncols=3, nrows=2, figsize=(12, 10), sharey=True, sharex="col")
+
+
+axes = axs[0, :]
+for label, ls in zip(("E shape", "C shape"), ("-", ":")):
+    ds = res_pseudo[key][label].sel(column=0, altitude=slice(None, 14500))
+    ds = ds  # .rolling(altitude=50, center=True).mean()
+
     csc = calc_cs_convergence_sw(ds)
-    csc["stab"] = csc["stab"].rolling(altitude=roll, center=True).mean()
-    csc[mass_var] = csc[mass_var].rolling(altitude=roll, center=True).mean()
 
-    htgr = (
-        (ds.lw_htgr + ds.sw_htgr.mean("mu0")).rolling(altitude=roll, center=True).mean()
-    )
-    mflux = ph.mass_flux(csc["rho"], csc["stab"], (htgr - dH.values))
+    for htgr, c, ll, add in zip(
+        (
+            ds.lw_htgr,
+            ds.lw_htgr + ds.sw_htgr.mean("mu0"),
+            ds.lw_htgr + ds.sw_htgr.sel(mu0=12),
+        ),
+        ("blue", "black", "red"),
+        ("lw", "lw + sw mean", "lw + sw max"),
+        ("_lw", "", "_swmax"),
+    ):
+        ll = label + " " + ll
+        axes[0].plot(
+            (htgr * 60 * 60 * 24),
+            ds.ta,
+            color=c,
+            label=ll,
+            linestyle=ls,
+        )
 
-    htgr.plot(y="altitude")
-    (htgr - dH.values).plot(y="altitude")
-    htgr.loc[dict(altitude=slice(2500, 5000))] = (
-        htgr.loc[dict(altitude=slice(2500, 5000))] - dH.values
-    )
-    htgr.plot(y="altitude")
+        axes[1].plot(
+            csc[f"csc_cool{add}"] * 60 * 60 * 24,
+            ds.ta,
+            color=c,
+            linestyle=ls,
+        )
+        axes[2].plot(
+            (csc[f"csc_cool{add}"] + csc[f"csc_stab{add}"]) * 60 * 60 * 24,
+            ds.ta,
+            color=c,
+            linestyle=ls,
+        )
+axes = axs[1, :]
+for label, ls in zip(("E shape", "C shape"), ("-", ":")):
+    ds = res_real[key][label].sel(column=0, altitude=slice(None, 14500))
+    ds = ds.rolling(altitude=50, center=True).mean()
 
-sns.despine(offset={"left": 10})
+    csc = calc_cs_convergence_sw(ds)
+
+    for htgr, c, ll, add in zip(
+        (
+            ds.lw_htgr,
+            ds.lw_htgr + ds.sw_htgr.mean("mu0"),
+            ds.lw_htgr + ds.sw_htgr.sel(mu0=12),
+        ),
+        ("blue", "black", "red"),
+        ("lw", "lw + sw mean", "lw + sw max"),
+        ("_lw", "", "_swmax"),
+    ):
+        ll = label + " " + ll
+        axes[0].plot(
+            (htgr * 60 * 60 * 24),
+            ds.ta,
+            color=c,
+            label=ll,
+            linestyle=ls,
+        )
+
+        axes[1].plot(
+            csc[f"csc_cool{add}"].rolling(altitude=50, center=True).mean()
+            * 60
+            * 60
+            * 24,
+            ds.ta.rolling(altitude=50, center=True).mean(),
+            color=c,
+            linestyle=ls,
+        )
+        axes[2].plot(
+            (csc[f"csc_cool{add}"] + csc[f"csc_stab{add}"])
+            .rolling(altitude=50, center=True)
+            .mean()
+            * 60
+            * 60
+            * 24,
+            ds.ta.rolling(altitude=50, center=True).mean(),
+            color=c,
+            linestyle=ls,
+        )
+
+axes[2].invert_yaxis()
+axes[1].set_xlim(-0.5, 0.5)
+axes[2].set_xlim(-0.5, 0.5)
+axes[2].axvline(0, color="grey")
+for ax in axs.flatten():
+    ax.axhline(273.15, color="grey")
+    ax.axvline(0, color="grey")
+#
+axes[0].set_ylim(302, 240)
+axs[0, 0].legend()
+axs[0, 1].set_title("Moist Adiabat Temperature")
+axs[1, 1].set_title("Real Temperature")
+for ax in axs[:, 0]:
+    ax.set_ylabel("Temperature / K")
+axes[0].set_xlabel("Heating Rate / K day$^{-1}$")
+axes[1].set_xlabel(r"CSC$_{\mathcal{H}}$ / day$^{-1}$")
+axes[2].set_xlabel(r"CSC = CSC$_{\mathcal{H}}$ + CSC$_{\sigma}$ / day$^{-1}$")
+sns.despine(offset=10)
+fig.savefig("../../plots/csc.pdf")
+# %%
+
+# %%

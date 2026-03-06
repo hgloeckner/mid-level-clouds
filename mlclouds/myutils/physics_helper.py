@@ -14,9 +14,19 @@ def calc_Tv(T, mr):
     return T * (1 + mr / eps) / (1 + mr)
 
 
+def get_csc_stab(rho, stability, H):
+    grad_stability = stability.differentiate("altitude")
+    return 1 / (stability) ** 2 / rho * H * grad_stability
+
+
+def get_csc_cooling(rho, stability, H):
+    grad_H = H.differentiate("altitude")
+    return -1 / stability / rho * grad_H
+
+
 def get_stability(theta, T):
     # \Gamma_d - \Gamma according to Holton & Hakim (5th edition)  2013 eq 2.49
-    return (T / theta * theta.differentiate("altitude")) * 1000
+    return T / theta * theta.differentiate("altitude")
 
 
 def get_n2(th, qv, altdim="altitude"):
@@ -82,16 +92,6 @@ def vmr2specific_humidity(x):
     Mw = mtc.molar_mass_h2o
 
     return x / ((1 - x) * Md / Mw + x)
-
-
-def get_csc_stab(rho, stability, H):
-    grad_stability = stability.differentiate("altitude") * 1000
-    return 1 / (stability) * (H / stability * grad_stability)
-
-
-def get_csc_cooling(rho, stability, H):
-    grad_H = H.differentiate("altitude") * 1000
-    return -1 / (stability) * grad_H
 
 
 def mass_flux(rho, stability, H):

@@ -161,3 +161,7 @@ def find_highest_cloud_altitude(
         mask.sizes[altdim] - 1 - mask_inv.argmax(dim=altdim)
     ]
     return np.where(mask.any(dim=altdim), highest_altitude, np.nan)
+
+
+# def get_sondes_for_circle(ds, circle_id):
+#    ind = ds.

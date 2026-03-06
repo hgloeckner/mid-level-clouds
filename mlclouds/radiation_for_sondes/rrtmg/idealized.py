@@ -160,7 +160,7 @@ for qs, name in zip([quniform, qcshape, qwshape], ["uniform", "cshape", "wshape"
             sw_fluxes.append(op_sw.rte.solve(add_to_input=False))
 
         flxs[name][r] = xr.merge(
-            [lw_fluxes, xr.concat(sw_fluxes, dim="mu0").mean(dim="mu0"), atmosphere]
+            [lw_fluxes, xr.concat(sw_fluxes, dim="mu0"), atmosphere]  # mean(dim="mu0")
         )
 
 # %%
@@ -199,7 +199,7 @@ flxs["sondes"] = {
     0.9: xr.merge(
         [
             oplw.rte.solve(add_to_input=False),
-            xr.concat(flx, dim="mu0").mean(dim="mu0"),
+            xr.concat(flx, dim="mu0"),  # .mean(dim="mu0"),
             atmosphere_sonde,
         ]
     )
@@ -251,22 +251,24 @@ for idx, name in enumerate(["uniform", "cshape", "wshape"]):
         else:
             lw_label = None
             sw_label = None
-
+        ht_lw = htgr[name][r]["lw"]
+        ht_lw = np.insert(ht_lw, -1, ht_lw[-1])
+        ht_sw = np.mean(htgr[name][r]["sw"], axis=0)
+        ht_sw = np.insert(ht_sw, -1, ht_sw[-1])
         axes[1].plot(
-            htgr[name][r]["lw"] + htgr[name][r]["sw"],
+            ht_sw + ht_lw,
             atmosphere.pres_level.mean(dim="column") / 100,
             # label=f"RH: {r}",
             color=total_colors[i],
         )
-
         axes[1].plot(
-            htgr[name][r]["lw"],
+            ht_lw,
             atmosphere.pres_level.mean(dim="column") / 100,
             color=lw_colors[i],
             label=lw_label,
         )
         axes[1].plot(
-            htgr[name][r]["sw"],
+            ht_sw,
             atmosphere.pres_level.mean(dim="column") / 100,
             color=sw_colors[i],
             label=sw_label,
@@ -312,7 +314,10 @@ pseudo = pseudo.assign(
 
 # %%
 name = "cshape"
-fig, axes = plt.subplots(ncols=3, sharey=True, figsize=(10, 6))
+cm = 1 / 2.54  # centimeters to inches
+cw = 20 * cm
+sns.set_context("paper", font_scale=0.8)
+fig, axes = plt.subplots(ncols=3, sharey=True, figsize=(cw, 0.5 * cw))
 axes[0].plot(pseudo.stability, pseudo.T, label="pseudo", color="black", linestyle="-.")
 axes[0].plot(
     ph.get_stability(
@@ -358,6 +363,7 @@ axes[1].plot(
     color="black",
 )
 for name, ls in zip(["cshape", "wshape", "sondes"], ["--", ":", "-"]):
+    """
     axes[2].plot(
         (htgr[name][0.9]["lw"] + htgr[name][0.9]["sw"])[0:180],
         atmosphere.temp_level.isel(level=slice(0, 180), column=0),
@@ -372,8 +378,9 @@ for name, ls in zip(["cshape", "wshape", "sondes"], ["--", ":", "-"]):
         color=lw_colors[-1],
         linestyle=ls,
     )
+    """
     axes[2].plot(
-        htgr[name][0.9]["sw"][0:180],
+        np.mean(htgr[name][0.9]["sw"], axis=0)[0:180],
         atmosphere.temp_level.isel(level=slice(0, 180), column=0),
         color=sw_colors[-1],
         linestyle=ls,
@@ -383,20 +390,23 @@ for name, ls in zip(["cshape", "wshape", "sondes"], ["--", ":", "-"]):
 axes[0].invert_yaxis()
 axes[1].legend()
 axes[0].legend()
-axes[2].axvline(0, color="k", linestyle="-", alpha=0.5)
+# axes[2].axvline(0, color="k", linestyle="-", alpha=0.5)
 axes[0].set_xlabel(r"d$\theta$/dz / K km$^{-1}$")
 axes[2].set_xlabel("heating rate / K day$^{-1}$")
 axes[1].set_xlabel("RH / 1")
 axes[0].set_ylabel("temperature / K")
+axes[0].set_ylim(305, 230)
 for ax in axes:
     ax.axhline(273.15, color="k", alpha=0.5)
 sns.despine(offset=10)
+fig.tight_layout()
+fig.savefig("../../../plots/idealized_profiles_sw.pdf")
 
 # %% csc lw vs total
 rh = 0.9
+idxmu = 14
 
-
-fig, axes = plt.subplots(ncols=2, nrows=2, sharey=True, sharex="col", figsize=(12, 12))
+fig, axes = plt.subplots(ncols=2, nrows=2, sharey=True, sharex="col", figsize=(cw, cw))
 
 for i, (form, qs) in enumerate(zip(["cshape", "wshape"], [qcshape, qwshape])):
     rho = (
@@ -409,29 +419,36 @@ for i, (form, qs) in enumerate(zip(["cshape", "wshape"], [qcshape, qwshape])):
         .swap_dims({"level": "altitude"})
         .drop_vars("column")
     )
+    ht = -(htgr[form][rh]["lw"] + htgr[form][rh]["sw"][idxmu]) / 60 / 60 / 24
+    ht = np.insert(ht, -1, ht[-1])
     totalcool = xr.DataArray(
-        -(htgr[form][rh]["lw"] + htgr[form][rh]["sw"]) / 60 / 60 / 24,
+        ht,
         coords={"altitude": pseudo.altitude},
     )
 
     csc = {"lw": {}, "sw": {}, "total": {}}
     for name in ["lw", "sw"]:
+        if name == "lw":
+            ht = -(htgr[form][rh][name] / 60 / 60 / 24)
+        elif name == "sw":
+            ht = -(htgr[form][rh][name][idxmu] / 60 / 60 / 24)
+        ht = np.insert(ht, -1, ht[-1])
         cool = xr.DataArray(
-            -htgr[form][rh][name] / 60 / 60 / 24,
+            ht,
             coords={"altitude": pseudo.altitude},
         )
         csc[name]["stab"] = ph.get_csc_stab(rho, pseudo.stability, cool) * 60 * 60 * 24
         csc[name]["cool"] = (
             ph.get_csc_cooling(rho, pseudo.stability, cool) * 60 * 60 * 24
         )
-        csc[name]["M"] = ph.mass_flux(pseudo.stability, cool) * 60 * 60 * 24
+        csc[name]["M"] = ph.mass_flux(pseudo.stability, cool, rho) * 60 * 60 * 24
     csc["total"]["stab"] = (
         ph.get_csc_stab(rho, pseudo.stability, totalcool) * 60 * 60 * 24
     )
     csc["total"]["cool"] = (
         ph.get_csc_cooling(rho, pseudo.stability, totalcool) * 60 * 60 * 24
     )
-    csc["total"]["M"] = ph.mass_flux(pseudo.stability, totalcool) * 60 * 60 * 24
+    csc["total"]["M"] = ph.mass_flux(pseudo.stability, totalcool, rho) * 60 * 60 * 24
 
     for name, ls in zip(["lw", "sw", "total"], ["--", ":", "-"]):
         if name == "total":
@@ -476,7 +493,7 @@ for ax in axes[:, 0]:
     ax.set_xlim(-0.3, 0.3)
 
     ax.set_ylim(295, 250)
-axes[0, 1].set_xlim(-7e-4, 7e-4)
+axes[0, 1].set_xlim(-7e-1, 7e-1)
 for ax in axes[:, 1]:
     ax.axvline(0, color="k", linestyle="-", alpha=0.5)
     ax.axhline(273.15, color="k", alpha=0.5)
@@ -486,8 +503,117 @@ for ax in axes[:, 0]:
 axes[0, 0].legend()
 
 
-axes[1, 0].set_xlabel("CSC(?) / s$^{-1}$")
-axes[1, 1].set_xlabel("M (?) / kg m$^{-2}$ day$^{-1}$")
+axes[1, 0].set_xlabel("CSC / s$^{-1}$")
+axes[1, 1].set_xlabel("M  / kg m$^{-2}$ day$^{-1}$")
 sns.despine(offset=10)
-fig.savefig("../../../plots/csc.pdf")
+fig.tight_layout()
+fig.savefig("../../../plots/csc_plot.pdf", bbox_inches="tight")
 # ax.invert_yaxis()
+# %%
+
+# %% csc lw vs total
+rh = 0.9
+idxmu = 14
+
+fig, axes = plt.subplots(ncols=2, nrows=2, sharey=True, sharex="col", figsize=(cw, cw))
+
+for i, (form, qs) in enumerate(zip(["cshape", "wshape"], [qcshape, qwshape])):
+    rho = (
+        ph.density_from_q(
+            p=flxs[form][rh].pres_level.isel(column=0),
+            T=flxs[form][rh].temp_level.isel(column=0),
+            q=qs[rh].values,
+        )
+        .assign_coords(altitude=("level", pseudo.altitude.values))
+        .swap_dims({"level": "altitude"})
+        .drop_vars("column")
+    )
+    ht = -(htgr[form][rh]["lw"] + htgr[form][rh]["sw"].mean(axis=0)) / 60 / 60 / 24
+    ht = np.insert(ht, -1, ht[-1])
+    totalcool = xr.DataArray(
+        ht,
+        coords={"altitude": pseudo.altitude},
+    )
+
+    csc = {"lw": {}, "sw": {}, "total": {}}
+    for name in ["lw", "sw"]:
+        if name == "lw":
+            ht = -(htgr[form][rh][name] / 60 / 60 / 24)
+        elif name == "sw":
+            ht = -(htgr[form][rh][name].mean(axis=0) / 60 / 60 / 24)
+        ht = np.insert(ht, -1, ht[-1])
+        cool = xr.DataArray(
+            ht,
+            coords={"altitude": pseudo.altitude},
+        )
+        csc[name]["stab"] = ph.get_csc_stab(rho, pseudo.stability, cool) * 60 * 60 * 24
+        csc[name]["cool"] = (
+            ph.get_csc_cooling(rho, pseudo.stability, cool) * 60 * 60 * 24
+        )
+        csc[name]["M"] = ph.mass_flux(pseudo.stability, cool, rho) * 60 * 60 * 24
+    csc["total"]["stab"] = (
+        ph.get_csc_stab(rho, pseudo.stability, totalcool) * 60 * 60 * 24
+    )
+    csc["total"]["cool"] = (
+        ph.get_csc_cooling(rho, pseudo.stability, totalcool) * 60 * 60 * 24
+    )
+    csc["total"]["M"] = ph.mass_flux(pseudo.stability, totalcool, rho) * 60 * 60 * 24
+
+    for name, ls in zip(["lw", "sw", "total"], ["--", ":", "-"]):
+        if name == "total":
+            lstab = r"CSC$_{\frac{{\partial S}}{{\partial z}}}$"
+            lcool = r"CSC$_{\frac{{\partial \mathcal{{H}}}}{{\partial z}}}$"
+        else:
+            lstab = ""
+            lcool = ""
+        axes[i, 0].plot(
+            csc[name]["stab"].sel(altitude=slice(0, 12000)),
+            pseudo.T.sel(altitude=slice(0, 12000)),
+            ls=ls,
+            color="C1",
+            label=lstab,
+        )
+        axes[i, 0].plot(
+            csc[name]["cool"].sel(altitude=slice(0, 12000)),
+            pseudo.T.sel(altitude=slice(0, 12000)),
+            ls=ls,
+            color="C0",
+            label=lcool,
+        )
+        axes[i, 0].plot(
+            (csc[name]["cool"] + csc[name]["stab"]).sel(altitude=slice(0, 12000)),
+            pseudo.T.sel(altitude=slice(0, 12000)),
+            label=name.upper(),
+            ls=ls,
+            color="k",
+        )
+        axes[i, 1].plot
+        axes[i, 1].plot(
+            csc[name]["M"].sel(altitude=slice(0, 12000)),
+            pseudo.T.sel(altitude=slice(0, 12000)),
+            label=name.upper(),
+            ls=ls,
+            color="k",
+        )
+
+for ax in axes[:, 0]:
+    ax.axvline(0, color="k", linestyle="-", alpha=0.5)
+    ax.axhline(273.15, color="k", alpha=0.5)
+    ax.set_xlim(-0.3, 0.3)
+
+    ax.set_ylim(295, 250)
+axes[0, 1].set_xlim(-7e-1, 7e-1)
+for ax in axes[:, 1]:
+    ax.axvline(0, color="k", linestyle="-", alpha=0.5)
+    ax.axhline(273.15, color="k", alpha=0.5)
+ax.legend()
+for ax in axes[:, 0]:
+    ax.set_ylabel("Temperature / K")
+axes[0, 0].legend()
+
+
+axes[1, 0].set_xlabel("CSC / s$^{-1}$")
+axes[1, 1].set_xlabel("M  / kg m$^{-2}$ day$^{-1}$")
+sns.despine(offset=10)
+fig.tight_layout()
+fig.savefig("../../../plots/csc_mean.pdf", bbox_inches="tight")
