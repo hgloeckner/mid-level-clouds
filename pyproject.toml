@@ -24,6 +24,7 @@ dependencies = [
     "numpy",
     "orcestra",
     "pandas",
+    "pre-commit>=4.5.1",
     "pydropsonde",
     "pytest",
     "requests",

@@ -64,13 +64,17 @@ def get_cids():
     }
 
 
-def open_wales(masked=True):
-    if masked:
-        wv_path = "/work/mh0066/m301046/Data/wales/wales_wv_masked.zarr"
-        no_wv_path = "/work/mh0066/m301046/Data/wales/wales_no_wv_masked.zarr"
+def open_wales(masked=True, local=False):
+    if local:
+        folder = "/Users/helene/Documents/Data/"
     else:
-        wv_path = "/work/mh0066/m301046/Data/wales/wales_wv.zarr"
-        no_wv_path = "/work/mh0066/m301046/Data/wales/wales_no_wv.zarr"
+        folder = "/work/mh0066/m301046/Data/wales/"
+    if masked:
+        wv_path = f"{folder}wales_wv_masked.zarr"
+        no_wv_path = f"{folder}wales_no_wv_masked.zarr"
+    else:
+        wv_path = f"{folder}wales_wv.zarr"
+        no_wv_path = f"{folder}wales_no_wv.zarr"
 
     wv = xr.open_dataset(
         wv_path,

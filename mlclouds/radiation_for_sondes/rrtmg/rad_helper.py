@@ -38,7 +38,7 @@ def calc_heating_rate_from_flx(flx_up, flx_down, p):
     g = mtc.gravity_earth
     flx = flx_up - flx_down
     htg = g / cp * np.diff(flx, axis=-1) / np.diff(p, axis=-1)
-    return np.insert(htg, -1, htg[-1])
+    return htg#np.insert(htg, -1, htg[-1])
 
 
 def uniform_humidity(ds, zlcl, ztoa, rh, es=mtf.es_default):
