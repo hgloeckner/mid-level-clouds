@@ -43,7 +43,7 @@ def cos_zenith_angle(time, lat, lon):
     return mu
 
 
-def get_mu_day(date, lat, lon):
-    hourlist = [date + np.timedelta64(h, "h") for h in range(0, 24)]
+def get_mu_day(date, lat, lon, lim=24):
+    hourlist = [date + np.timedelta64(h, "h") for h in range(0, lim)]
 
     return [cos_zenith_angle(t, lat, lon) for t in hourlist]

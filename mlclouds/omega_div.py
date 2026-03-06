@@ -7,7 +7,7 @@ import sys
 from xhistogram.xarray import histogram
 
 sys.path.append("../")
-from myutils import open_datasets
+from myutils import open_datasets as od
 from myutils import physics_helper as physics
 import myutils.data_helper as dh
 from orcestra import get_flight_segments
@@ -34,7 +34,7 @@ colors = {
     "west": "#00b4d8",
 }
 # %%
-wv, no_wv = open_datasets.open_wales(masked=False)
+wv, no_wv = od.open_wales(masked=False, local=True)
 wv = wv.assign(q=physics.wv2q(wv))
 no_wv = no_wv.sel(time=slice(np.datetime64("2024-08-10"), np.datetime64("2024-09-29")))
 no_wv = xr.where(no_wv.bsrgl_flags == 8, 100, no_wv)
@@ -114,7 +114,7 @@ fig.colorbar(p, ax=ax, label="RH")
 
 # %%
 
-
+"""
 def calc_partial_omega(
     ds, intvar="div", pvar="p_mean", alt_dim="altitude", omega_name="omega"
 ):
@@ -151,16 +151,17 @@ for cid in lcircle.circle_id.values:
     ds = lcircle.sel(circle_id=cid)
     omega_u.append(calc_partial_omega(ds, intvar="u_dudx", omega_name="omega_u"))
     omega_v.append(calc_partial_omega(ds, intvar="v_dvdy", omega_name="omega_v"))
+"""
 # %%
-dspartial = xr.merge(
-    [
-        lcircle,
-        xr.concat(omega_u, dim="circle_id"),
-        xr.concat(omega_v, dim="circle_id"),
-    ]
-)
+dspartial = lcircle  # xr.merge(
+# [
+# lcircle,
+# xr.concat(omega_u, dim="circle_id"),
+# xr.concat(omega_v, dim="circle_id"),
+# ]
+# )
 # %%
-
+"""
 fig, ax = plt.subplots(figsize=(8, 6))
 
 dspartial.isel(circle_id=5).omega_u.plot(y="altitude", ax=ax, label="omega_u")
@@ -170,8 +171,9 @@ dspartial.isel(circle_id=5).omega_v.plot(y="altitude", ax=ax, label="omega_v")
 )
 dspartial.isel(circle_id=5).omega.plot(y="altitude", ax=ax, label="omega")
 ax.legend()
+"""
 # %%
-
+import cmocean as cmo
 
 cvar = "omega"
 tvar = "cttmean"
@@ -234,6 +236,7 @@ mid_cond = (
 )
 high_cond = (dspartial.ctmean >= 8000) & (dspartial.high_frac >= thres)
 # %%
+"""
 low = 2000
 midlow = 5000
 high = 8000
@@ -315,16 +318,34 @@ for name, cond in zip(
     print(
         "low | div |", ds.div.sel(altitude=slice(0, low)).mean("altitude").values, "\n"
     )
-
+"""
 # %%
 
+cvar = "div"
+for cond, name in zip(
+    [high_cond, mid_cond, low_cond | few_cond], ["high_frac", "mid_frac", "low_frac"]
+):
+    ds = dspartial.where(cond, drop=True)
 
-cvar = "omega"
+    hs = histogram(
+        ds[name],
+        ds.ta_mean,
+        bins=[np.arange(0, 1, 0.02), np.arange(210, 305, 1)],
+        weights=ds[cvar] * 60 * 60 / 100,
+    ) / histogram(
+        ds[name],
+        ds.ta_mean,
+        bins=[np.arange(0, 1, 0.02), np.arange(210, 305, 1)],
+    )
+    hs.to_zarr(f"/Users/helene/Documents/Data/{cvar}_" + name + ".zarr", mode="w")
+# %%
+
+cvar = "div"
 tvar = "cttmean"
 variables = ["high_frac", "mid_frac", "low_frac"]
 kwargs = dict(
-    vmin=-20,  # -25,
-    vmax=20,  # 25,
+    vmin=-2e-3,  # -20,  # -25,
+    vmax=2e-3,  # 20,  # 25,
 )
 sns.set_context("paper", font_scale=0.8)
 cw = 190 / 25.4
@@ -336,24 +357,18 @@ fig, axs = plt.subplots(
     sharex="col",
     sharey=True,
 )
-for idx, cond in enumerate([high_cond, mid_cond, low_cond]):
+for idx, cond in enumerate([high_cond, mid_cond, (low_cond | few_cond)]):
     axes = axs[:, 1]
     var = variables[idx]
     ds = dspartial.where(cond, drop=True)
-    p = (
-        histogram(
-            ds[var],
-            ds.ta_mean,
-            bins=[np.arange(0, 1, 0.02), np.arange(210, 305, 1)],
-            weights=ds[cvar] * 60 * 60 / 100,
-        )
-        / histogram(
-            ds[var],
-            ds.ta_mean,
-            bins=[np.arange(0, 1, 0.02), np.arange(210, 305, 1)],
-        )
-    ).plot(
-        y="ta_mean_bin", cmap="cmo.balance", add_colorbar=False, ax=axes[idx], **kwargs
+    hs = xr.open_dataset(f"/Users/helene/Documents/Data/{cvar}_" + var + ".zarr")
+    p = hs["histogram_" + var + "_ta_mean"].plot(
+        y="ta_mean_bin",
+        cmap="cmo.balance",
+        add_colorbar=False,
+        ax=axes[idx],
+        rasterized=True,
+        **kwargs,
     )
 
     (
@@ -368,34 +383,50 @@ for idx, cond in enumerate([high_cond, mid_cond, low_cond]):
         )
     ).plot(ax=axes[idx], color="k", marker="o", linestyle="", markersize=2)
 for idx, (cond, lim) in enumerate(
-    zip([high_cond, mid_cond, low_cond], [None, 230, 230])
+    zip([high_cond, mid_cond, low_cond | few_cond], [None, 230, 230])
 ):
     for cvar, ls, label in zip(
-        ["omega", "omega_u", "omega_v"],
+        ["div"],
         ["-", "--", ":"],
         ["$\omega$", "$\omega_u$", "$\omega_v$"],
     ):
         axes = axs[:, 0]
         cloudds = dspartial.where(cond, drop=True)
-        (
-            histogram(
-                cloudds.ta_mean,
-                bins=[np.arange(210, 305, 1)],
-                weights=cloudds[cvar] * 60 * 60 / 100,
+        hs = (
+            (
+                histogram(
+                    cloudds.ta_mean,
+                    bins=[np.arange(210, 305, 1)],
+                    weights=cloudds[cvar] * 60 * 60 / 100,
+                )
+                / histogram(
+                    cloudds.ta_mean,
+                    bins=[np.arange(210, 305, 1)],
+                )
             )
-            / histogram(
-                cloudds.ta_mean,
-                bins=[np.arange(210, 305, 1)],
+            .rolling(
+                ta_mean_bin=5,
+                center=True,
             )
-        ).rolling(
-            ta_mean_bin=5,
-            center=True,
-        ).mean().sel(ta_mean_bin=slice(lim, None)).plot(
-            y="ta_mean_bin", ax=axes[idx], label=label, linestyle=ls, color="k"
+            .mean()
+            .sel(ta_mean_bin=slice(lim, None))
         )
+        for i, ax in enumerate(axes):
+            if i == idx:
+                color = "k"
+                alpha = 1
+            else:
+                color = "grey"
+                alpha = 0.3
+            hs.plot(
+                y="ta_mean_bin",
+                ax=ax,
+                linestyle=ls,
+                color=color,
+                alpha=alpha,  # label=label,
+            )
 
-
-axs[1, 0].legend()
+# axs[1, 0].legend()
 axes[0].invert_yaxis()
 for ax in axs.flatten():
     ax.axhline(273.15, color="k", linestyle="-", alpha=0.5)
@@ -404,21 +435,23 @@ for ax in axs.flatten():
 for ax in axs[:, 0]:
     ax.axvline(0, color="k", linestyle="-", alpha=0.5)
     ax.set_ylabel("Temperature / K")
-axs[2, 0].set_xlabel("omega / hPa hr$^{-1}$")
-axs[0, 1].set_xlim(0.3, 1)
-axs[0, 0].set_xlim(-10, 4)
+axs[2, 0].set_xlabel("divergence / $s^{-1}$")  # "omega / hPa hr$^{-1}$")
+axs[0, 1].set_xlim(0.0, 1)
+# axs[0, 0].set_xlim(-10, 4)
 axs[0, 1].set_xlabel("fraction of high cloud in high-cloud circles")
 axs[1, 1].set_xlabel("fraction of mid-level cloud in mid-level cloud circles")
-axs[2, 1].set_xlabel("fraction of low cloud in low-cloud circles")
+axs[2, 1].set_xlabel("fraction of low cloud in low-cloud and few-cloud circles")
 sns.despine(offset=5)
 fig.tight_layout()
 fig.colorbar(
     p,
     ax=axs[:, 1],
-    label="omega / hPa hr$^{-1}$",
+    label="divergence / $s^{-1}$",  # "omega / hPa hr$^{-1}$",
     extend="both",
     fraction=0.1,
     shrink=0.5,
 )
-
-fig.savefig("/scratch/m/m301046/omega_cloudtype.pdf")
+fig.savefig(
+    f"/Users/helene/Documents/code/mid_level_clouds/plots/{cvar}_cloudtype.pdf", dpi=300
+)
+# fig.savefig("/scratch/m/m301046/omega_cloudtype.pdf")
