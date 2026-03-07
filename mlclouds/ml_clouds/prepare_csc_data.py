@@ -11,17 +11,18 @@ import moist_thermodynamics.functions as mtf
 import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.saturation_vapor_pressures as svp
 
-from pyrte_rrtmgp.rrtmgp import GasOptics
-from pyrte_rrtmgp.rrtmgp_data_files import GasOpticsFiles
 import myutils.moist_adiabats as ma
 from radiation_for_sondes.rrtmg import angles
 import radiation_for_sondes.rrtmg.rad_helper as rad
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
-levante = True
+levante = False
 
 if levante:
+    from pyrte_rrtmgp.rrtmgp import GasOptics
+    from pyrte_rrtmgp.rrtmgp_data_files import GasOpticsFiles
+
     file_path = "/scratch/m/m301046/"
     cth_path = "/work/mh0066/m301046/ml_clouds/sondes_for_radiation.nc"
 
@@ -116,7 +117,7 @@ radbeach = xr.open_dataset(cth_path, engine="netcdf4").swap_dims({"sonde": "sond
 
 for key in ["CTH < 4 km", "CTH > 8 km", "CTH 4-8 km"]:
     beachdata[key] = beach.swap_dims({"sonde": "sonde_id"}).sel(sonde_id=sids[key])
-    raddata[key] = rrtmg_fluxes.swap_dims({"column": "sonde_id"}).sel(
+    raddata[key] = radbeach.sel(  # .swap_dims({"column": "sonde_id"})
         sonde_id=sids[key]
     )
 
@@ -213,19 +214,64 @@ qkwargs = {
 }
 
 
+def get_rh_from_ref(ds, ref_ds, zlcl, ref_zlcl, rhvar):
+    ref_rhfree = ref_ds.sel(
+        altitude=slice(ref_zlcl, ref_ds.altitude[ref_ds.T.argmin()])
+    )
+    rhfree = ds.sel(altitude=slice(zlcl, ds.altitude[ds.T.argmin()]))
+    print(rhfree)
+    rh_ps = (
+        ref_rhfree.swap_dims({"altitude": "T"})
+        .interp(T=rhfree.T.values, kwargs={"fill_value": "extrapolate"})
+        .assign(altitude=("T", rhfree.altitude.values))
+        .swap_dims({"T": "altitude"})
+        .interp_like(ds)
+        .reset_coords("T")
+    )
+    return mtf.specific_humidity_to_relative_humidity(
+        mtf.relative_humidity_to_specific_humidity(rh_ps[rhvar], ds.P, ds.T, es=es)
+        .bfill("altitude")
+        .ffill("altitude"),
+        ds.P,
+        ds.T,
+        es=es,
+    )
+
+
 qrev = {}
 qpseu = {}
+qreal = {}
+
 ad = "reversible"
 rev = adiabat_ds.sel(adiabat=ad)
 for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:  #
     pseu = adiabat_ds.sel(adiabat="pseudo", cth=cth)
-    ds = rev.sel(cth=cth)
-    qrev[cth] = ds
+    revds = rev.sel(cth=cth)
+    qrev[cth] = revds
     qpseu[cth] = pseu
+
+    beach = (
+        raddata[cth]
+        .rename(
+            {
+                "t": "T",
+                "p": "P",
+            }
+        )[["P", "T"]]
+        .mean("sonde_id")
+        .assign_coords(
+            cth=cth,
+            adiabat="BEACH",
+        )
+    )
+
+    qreal[cth] = beach
     for qname, qshape in zip(["c", "e"], [rad.cshape_humidity, rad.wshape_humidity]):
         qrev[cth] = (
             qrev[cth]
-            .assign({qname + "q": (("altitude",), qshape(ds, **qkwargs[cth]).values)})
+            .assign(
+                {qname + "q": (("altitude",), qshape(revds, **qkwargs[cth]).values)}
+            )
             .assign(cth=cth, adiabat=ad)
         )
         qrev[cth] = qrev[cth].assign(
@@ -235,57 +281,45 @@ for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:  #
                 )
             }
         )
-
-        rhfree = qrev[cth].sel(
-            altitude=slice(
-                qkwargs[cth]["zlcl"], qrev[cth].altitude[qrev[cth].T.argmin()]
+        for resdict in [qpseu, qreal]:
+            rh_ps = get_rh_from_ref(
+                ds=resdict[cth],
+                ref_ds=qrev[cth],
+                zlcl=qkwargs[cth]["zlcl"],
+                ref_zlcl=qkwargs[cth]["zlcl"],
+                rhvar=qname + "rh",
             )
-        )
-        rhfree_pseud = pseu
-        rhfree_pseud = rhfree_pseud.sel(
-            altitude=slice(
-                qkwargs[cth]["zlcl"], rhfree_pseud.altitude[rhfree_pseud.T.argmin()]
+
+            resdict[cth] = resdict[cth].assign(
+                {
+                    qname + "q": mtf.relative_humidity_to_specific_humidity(
+                        rh_ps, resdict[cth].P, resdict[cth].T, es=es
+                    )
+                    .bfill("altitude")
+                    .ffill("altitude")
+                }
             )
-        )
 
-        rh_ps = (
-            rhfree.swap_dims({"altitude": "T"})
-            .interp(T=rhfree_pseud.T.values, kwargs={"fill_value": "extrapolate"})
-            .assign(altitude=("T", rhfree_pseud.altitude.values))
-            .swap_dims({"T": "altitude"})
-            .interp_like(pseu)
-            .reset_coords("T")
-        )
-        qpseu[cth] = qpseu[cth].assign(
-            {
-                qname + "q": mtf.relative_humidity_to_specific_humidity(
-                    rh_ps[qname + "rh"], pseu.P, pseu.T, es=es
-                )
-                .bfill("altitude")
-                .ffill("altitude")
-            }
-        )
-        qpseu[cth] = qpseu[cth].assign(
-            {
-                qname + "rh": mtf.specific_humidity_to_relative_humidity(
-                    qpseu[cth][qname + "q"], qpseu[cth].P, qpseu[cth].T, es=es
-                )
-            }
-        )
+            resdict[cth] = resdict[cth].assign(
+                {
+                    qname + "rh": mtf.specific_humidity_to_relative_humidity(
+                        resdict[cth][qname + "q"], resdict[cth].P, resdict[cth].T, es=es
+                    )
+                }
+            )
 
-    rhpseu = xr.concat([qpseu[cth] for cth in qpseu.keys()], dim="cth")
-    adiabat_ds = xr.merge(
-        [
-            adiabat_ds,
-            xr.concat(
-                [
-                    xr.concat([qpseu[cth] for cth in qpseu.keys()], dim="cth"),
-                    xr.concat([qrev[cth] for cth in qrev.keys()], dim="cth"),
-                ],
-                dim="adiabat",
-            ),
-        ]
-    )
+        adiabat_ds = xr.merge(
+            [
+                adiabat_ds,
+                xr.concat(
+                    [
+                        xr.concat([qpseu[cth] for cth in qpseu.keys()], dim="cth"),
+                        xr.concat([qrev[cth] for cth in qrev.keys()], dim="cth"),
+                    ],
+                    dim="adiabat",
+                ),
+            ]
+        )
 
     """
     adiabat_ds = adiabat_ds.assign(
@@ -295,6 +329,10 @@ for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:  #
         ], dim="adiabat")
     ) 
     """
+real_ds = xr.concat([qreal[cth] for cth in qreal.keys()], dim="cth")
+# %%
+
+
 # %%
 cw = 190 / 25.4
 sns.set_context("talk", font_scale=0.8)
@@ -331,7 +369,20 @@ for idx, cth in enumerate(["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]):
         label="BEACH " + cth,
         color=colors[2 * idx + 1],
     )
+    """
+    ax.plot(
+        real_ds.sel(cth=cth).crh,
+        real_ds.sel(cth=cth).T,
+        color="k"
 
+    )
+    ax.plot(
+        real_ds.sel(cth=cth).erh,
+        real_ds.sel(cth=cth).T,
+        color="k"
+
+    )
+    """
 
 ax.legend()
 ax.set_xlim(0, 1)
@@ -344,19 +395,18 @@ fig.savefig(file_path + "mlcloud-rh_idealized_profiles.pdf")
 
 # %%
 
+
 def calc_radiation(ds, qvar="q"):
-    mu0 = angles.get_mu_day(
-                    np.datetime64("2024-08-30T00:00:00"), lat=0, lon=-30
-                )
+    mu0 = angles.get_mu_day(np.datetime64("2024-08-30T00:00:00"), lat=0, lon=-30)
     atmosphere = rad.make_atmosphere(
-                ds.P.values.reshape(1, ds.P.shape[0]),
-                ds.T.values.reshape(1, ds.P.shape[0]),
-                ph.specific_humidity2vmr(ds[qvar]).values.reshape(1, ds.P.shape[0]),
-                o3=radbeach.O3.interp(altitude=ds.altitude).values,
-            )
+        ds.P.values.reshape(1, ds.P.shape[0]),
+        ds.T.values.reshape(1, ds.P.shape[0]),
+        ph.specific_humidity2vmr(ds[qvar]).values.reshape(1, ds.P.shape[0]),
+        o3=radbeach.O3.interp(altitude=ds.altitude).values,
+    )
     assert not np.any(
-                [np.any(np.isnan(atmosphere[var])) for var in atmosphere.variables]
-            )
+        [np.any(np.isnan(atmosphere[var])) for var in atmosphere.variables]
+    )
 
     gas_optics_lw = GasOptics(gas_optics_file=GasOpticsFiles.LW_G256)
     op_lw = gas_optics_lw.compute(atmosphere, add_to_input=False)
@@ -372,48 +422,49 @@ def calc_radiation(ds, qvar="q"):
         sw_fluxes.append(op_sw.rte.solve(add_to_input=False))
 
     res = xr.merge(
-                [
-                    lw_fluxes,
-                    xr.concat(sw_fluxes, dim="mu0"),
-                    atmosphere,
-                ] 
-            )
+        [
+            lw_fluxes,
+            xr.concat(sw_fluxes, dim="mu0"),
+            atmosphere,
+        ]
+    )
 
-    return ( res
-                .assign(
-                    {
-                    "lw_htgr":xr.apply_ufunc(
-                        ph.calc_heating_rate_from_flx,
-                        res.lw_flux_up,
-                        res.lw_flux_down,
-                        res.pres_level,
-                        input_core_dims=[["level"], ["level"], ["level"]],
-                        output_core_dims=[["level"]],
-                        vectorize=True,
-                    ),
-                    "sw_htgr":xr.apply_ufunc(
-                        ph.calc_heating_rate_from_flx,
-                        res.sw_flux_up,
-                        res.sw_flux_down,
-                        res.pres_level,
-                        input_core_dims=[["level"], ["level"], ["level"]],
-                        output_core_dims=[["level"]],
-                        vectorize=True,
-                    ),
-                    "theta":mtf.theta(
-                        res.temp_level,
-                        res.pres_level,
-                    ),
-                    "altitude":("level", ds.altitude.values),
-                    qvar:("level", ds[qvar].values),
-                    }
-                )
-                .rename(
-                    temp_level="ta",
-                    pres_level="p",
-                )
-                .swap_dims({"level": "altitude"})
-            )
+    return (
+        res.assign(
+            {
+                "lw_htgr": xr.apply_ufunc(
+                    ph.calc_heating_rate_from_flx,
+                    res.lw_flux_up,
+                    res.lw_flux_down,
+                    res.pres_level,
+                    input_core_dims=[["level"], ["level"], ["level"]],
+                    output_core_dims=[["level"]],
+                    vectorize=True,
+                ),
+                "sw_htgr": xr.apply_ufunc(
+                    ph.calc_heating_rate_from_flx,
+                    res.sw_flux_up,
+                    res.sw_flux_down,
+                    res.pres_level,
+                    input_core_dims=[["level"], ["level"], ["level"]],
+                    output_core_dims=[["level"]],
+                    vectorize=True,
+                ),
+                "theta": mtf.theta(
+                    res.temp_level,
+                    res.pres_level,
+                ),
+                "altitude": ("level", ds.altitude.values),
+                qvar: ("level", ds[qvar].values),
+            }
+        )
+        .rename(
+            temp_level="ta",
+            pres_level="p",
+        )
+        .swap_dims({"level": "altitude"})
+    )
+
 
 cths = []
 for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
@@ -421,41 +472,49 @@ for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
     for adiabat in ["pseudo", "reversible"]:
         qs = []
         for qvar in ["c", "e"]:
-            ds = adiabat_ds.sel(cth = cth, adiabat=adiabat)
-            qs.append(calc_radiation(ds, qvar=qvar + "q").assign_coords(
-                cth=cth, adiabat=adiabat, rhshape=qvar
+            ds = adiabat_ds.sel(cth=cth, adiabat=adiabat)
+            qs.append(
+                calc_radiation(ds, qvar=qvar + "q").assign_coords(
+                    cth=cth, adiabat=adiabat, rhshape=qvar
+                )
             )
-            )
-        ads.append(
-            xr.concat(qs, dim="rhshape")
-        )
-    cths.append(
-        xr.concat(ads, dim="adiabat")
-    )
+        ads.append(xr.concat(qs, dim="rhshape"))
+    cths.append(xr.concat(ads, dim="adiabat"))
 
-xr.concat(
-    cths,
-    dim="cth"
-).to_netcdf(
-    file_path + "idealized_radiation_profiles.nc"
+xr.concat(cths, dim="cth").to_netcdf(file_path + "idealized_radiation_profiles.nc")
+
+
+# %%
+ds = xr.open_dataset(file_path + "idealized_radiation_profiles.nc").sel(
+    cth="CTH 4-8 km"
 )
-    
-    
-#%%
-ds = xr.open_dataset(
-    file_path + "idealized_radiation_profiles.nc"
-).sel(cth = "CTH 4-8 km")
 
 colors = ["#006C66", "#EF7C00"]
 
-fig, ax = plt.subplots(
-    figsize=(cw, 0.5*cw)
-)
+fig, ax = plt.subplots(figsize=(cw, 0.5 * cw))
 for ad, ls in zip(["reversible", "pseudo"], ["-", ":"]):
-    pltds = ds.sel(adiabat=ad,rhshape="e").sel(column=0)
-    ax.plot(60*60 * 24*pltds.lw_htgr, pltds.altitude, label="LW heating rate", c=colors[0], linestyle=ls)
-    ax.plot(60*60 * 24*pltds.sw_htgr.mean("mu0"), pltds.altitude, label="SW mean", c=colors[1], linestyle=ls)
-    ax.plot(60*60 * 24*pltds.sw_htgr.sel(mu0=12), pltds.altitude, label="SW heatingrate noon", c="red", linestyle=ls)
+    pltds = ds.sel(adiabat=ad, rhshape="e").sel(column=0)
+    ax.plot(
+        60 * 60 * 24 * pltds.lw_htgr,
+        pltds.altitude,
+        label="LW heating rate",
+        c=colors[0],
+        linestyle=ls,
+    )
+    ax.plot(
+        60 * 60 * 24 * pltds.sw_htgr.mean("mu0"),
+        pltds.altitude,
+        label="SW mean",
+        c=colors[1],
+        linestyle=ls,
+    )
+    ax.plot(
+        60 * 60 * 24 * pltds.sw_htgr.sel(mu0=12),
+        pltds.altitude,
+        label="SW heatingrate noon",
+        c="red",
+        linestyle=ls,
+    )
 
 ax.set_ylim(0, 15000)
 ax.set_xlim(-3, 3)
