@@ -10,15 +10,27 @@ import myutils.data_helper as dh
 import moist_thermodynamics.functions as mtf
 import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.saturation_vapor_pressures as svp
-from pyrte_rrtmgp.rrtmgp import GasOptics
-from pyrte_rrtmgp.rrtmgp_data_files import GasOpticsFiles
 
+# from pyrte_rrtmgp.rrtmgp import GasOptics
+# from pyrte_rrtmgp.rrtmgp_data_files import GasOpticsFiles
+import myutils.moist_adiabats as ma
 from radiation_for_sondes.rrtmg import angles
 import radiation_for_sondes.rrtmg.rad_helper as rad
 
-# %%
-file_path = "/Users/helene/Documents/code/mid_level_clouds/plots/"  # "/scratch/m/m301046/rrtmgp_sonde_fluxes.zarr"
+es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
+levante = False
+
+if levante:
+    filepath = "/scratch/m/m301046/"
+    cth_path = "/work/mh0066/m301046/ml_clouds/"
+
+else:
+    file_path = "/Users/helene/Documents/code/mid_level_clouds/plots/"
+    cth_path = file_path + "sondes_for_radiation.nc"
+
+
+# %%
 
 rrtmg_fluxes = xr.open_dataset(file_path + "rrtmgp_sonde_fluxes.zarr", engine="zarr")
 
@@ -28,65 +40,9 @@ beach = (
     .pipe(dh.extrapolate_sfc)
 )
 
-# %%
-
 wct = xr.open_dataset(file_path + "wales_radar_cloud_top_max.zarr", engine="zarr")
 
 beach = beach.assign(cth=wct["cloud-top"].sel(time=beach.launch_time, method="nearest"))
-# %%
-
-rrtmg_fluxes = rrtmg_fluxes.assign(
-    lw_htgr=xr.apply_ufunc(
-        ph.calc_heating_rate_from_flx,
-        rrtmg_fluxes.lw_flux_up,
-        rrtmg_fluxes.lw_flux_down,
-        rrtmg_fluxes.pres_level,
-        input_core_dims=[["level"], ["level"], ["level"]],
-        output_core_dims=[["level"]],
-        vectorize=True,
-    ),
-    sw_htgr=xr.apply_ufunc(
-        ph.calc_heating_rate_from_flx,
-        rrtmg_fluxes.sw_flux_up,
-        rrtmg_fluxes.sw_flux_down,
-        rrtmg_fluxes.pres_level,
-        input_core_dims=[["level"], ["level"], ["level"]],
-        output_core_dims=[["level"]],
-        vectorize=True,
-    ),
-)
-# %%
-
-rrtflx = rrtmg_fluxes.sel(level=slice(None, 130))
-hist_flx = histogram(
-    rrtflx.temp_level,
-    bins=[np.arange(220, 305, 1)],
-    dim=["level"],
-    weights=rrtflx.lw_htgr,
-) / histogram(
-    rrtflx.temp_level,
-    bins=[np.arange(220, 305, 1)],
-    dim=["level"],
-)
-hist_flx = hist_flx.to_dataset(name="lw_htgr").assign(
-    sw_htgr=(
-        histogram(
-            rrtflx.temp_level,
-            bins=[np.arange(220, 305, 1)],
-            dim=["level"],
-            weights=rrtflx.sw_htgr,
-        )
-        / histogram(
-            rrtflx.temp_level,
-            bins=[np.arange(220, 305, 1)],
-            dim=["level"],
-        )
-    ),
-    sonde_id=rrtflx.sonde_id,
-    launch_time=rrtflx.launch_time,
-    launch_lat=rrtflx.launch_lat,
-    launch_lon=rrtflx.launch_lon,
-)
 
 # %%
 no_sids = [
@@ -113,90 +69,10 @@ high_sids = [
 ]
 
 sids = {
-    "Clear Sky": no_sids,
-    "CTH < 4 km": low_sids,
+    "CTH < 4 km": low_sids + no_sids,
     "CTH 4-8 km": mid_sids,
     "CTH > 8 km": high_sids,
 }
-
-# %%
-regions = {
-    "east": dh.east,
-    "west": dh.west,
-    "north": dh.north,
-}
-mlbeach = beach.where((beach.cth >= 4000) & (beach.cth < 8000), drop=True)
-for name, region in regions.items():
-    reg_beach = dh.sel_sub_domain(mlbeach, region)
-    mean_cth = reg_beach.cth.mean("sonde")
-    print(f"{name} mean CTH", mean_cth.values)
-    print(
-        f"{name} mean Beach CTT",
-        reg_beach.interp(altitude=mean_cth).ta.mean("sonde").values,
-        "$\\pm$",
-        reg_beach.interp(altitude=mean_cth).ta.std("sonde").values,
-    )
-    print(
-        "10 and 90 percentiles:",
-        reg_beach.interp(altitude=mean_cth).ta.quantile(0.1, dim="sonde").values,
-        reg_beach.interp(altitude=mean_cth).ta.quantile(0.9, dim="sonde").values,
-    )
-reg_beach = mlbeach
-mean_cth = reg_beach.cth.mean("sonde")
-print("total mean CTH", mean_cth.values)
-print(
-    "total mean Beach CTT",
-    reg_beach.interp(altitude=mean_cth).ta.mean("sonde").values,
-    "$\\pm$",
-    reg_beach.interp(altitude=mean_cth).ta.std("sonde").values,
-)
-print(
-    "10 and 90 percentiles:",
-    reg_beach.interp(altitude=mean_cth).ta.quantile(0.1, dim="sonde").values,
-    reg_beach.interp(altitude=mean_cth).ta.quantile(0.9, dim="sonde").values,
-)
-
-# %%
-
-# %%
-
-
-fig, ax = plt.subplots(figsize=(6, 4))
-for ls, (label, ids) in zip(["-", "--", "-.", ":"], sids.items()):
-    pltds = hist_flx.swap_dims({"column": "sonde_id"}).sel(
-        sonde_id=ids
-    )  # .sel(level=slice(None, 130))
-
-    (pltds.mean("sonde_id").lw_htgr * 3600 * 24).plot(
-        y="temp_level_bin",
-        ax=ax,
-        color="blue",
-        linestyle=ls,
-    )
-    (pltds.mean("sonde_id").sw_htgr * 3600 * 24).plot(
-        y="temp_level_bin",
-        ax=ax,
-        color="red",
-        linestyle=ls,
-    )
-    (
-        pltds.mean("sonde_id").sw_htgr * 3600 * 24
-        + pltds.mean("sonde_id").lw_htgr * 3600 * 24
-    ).plot(
-        y="temp_level_bin",
-        ax=ax,
-        color="k",
-        linestyle=ls,
-        label=label,
-    )
-ax.invert_yaxis()
-ax.axhline(273.15, color="grey", linestyle="--")
-ax.set_xlim(-4, 3)
-ax.axvline(0, color="grey", linestyle="--")
-sns.despine(offset=10)
-ax.set_xlabel("Heating Rate / K day$^{-1}$")
-ax.set_ylabel("Temperature / K")
-ax.legend()
 
 
 # %%
@@ -231,233 +107,240 @@ def get_data(key):
 
 
 data = {key: get_data(key) for key in sids.keys()}
-# %%
-
-fig, ax = plt.subplots(figsize=(6, 4))
-for key, item in data.items():
-    (
-        data[key].theta.interp(altitude=data["Clear Sky"].altitude)
-        - data["Clear Sky"].theta
-    ).plot(y="altitude")
-
-ax.legend()
-ax.set_ylim(0, 15000)
-ax.set_xlim(-2, 2)
-# %%
-
-# %%
-"""
-todo:
-  - sw for complete day for real RH and T
-  - moist adiabat profile with corresponding real RH profiles -> RRTMG
-  - real T with idealized RH (E and C) -> RRTMG
-"""
 
 
 # %%
 beachdata = {}
 raddata = {}
-radbeach = xr.open_dataset(
-    file_path + "sondes_for_radiation.nc"  # /work/mh0066/m301046/ml_clouds
-).swap_dims({"sonde": "sonde_id"})
+radbeach = xr.open_dataset(cth_path).swap_dims({"sonde": "sonde_id"})
 
-beachdata["CTH < 4 km"] = beach.swap_dims({"sonde": "sonde_id"}).sel(
-    sonde_id=[sid for sid in low_sids] + [sid for sid in no_sids]
-)
-data["CTH < 4 km"] = rrtmg_fluxes.swap_dims({"column": "sonde_id"}).sel(
-    sonde_id=[sid for sid in low_sids] + [sid for sid in no_sids]
-)
-
-for key in ["CTH > 8 km", "CTH 4-8 km"]:
+for key in ["CTH < 4 km", "CTH > 8 km", "CTH 4-8 km"]:
     beachdata[key] = beach.swap_dims({"sonde": "sonde_id"}).sel(sonde_id=sids[key])
     raddata[key] = rrtmg_fluxes.swap_dims({"column": "sonde_id"}).sel(
         sonde_id=sids[key]
     )
 
-# %%
-
 # %% idealized radiation
-
-
-pseudos = {}
-zlcl = {}
+adiabat_fct = {
+    "pseudo": ma.pseudo_adiabat,
+    "reversible": ma.reversible_adiabat,
+}
+alt = 0
+adiabat_dict = {}
 for key in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
     Psfc = beachdata[key].p.mean(dim="sonde_id").sel(altitude=0).values
     P = np.arange(Psfc, 4000.0, -500)
     sfcT = beachdata[key].ta.mean(dim="sonde_id").sel(altitude=0).values
-    qsfc = (
-        beachdata[key].q.mean(dim="sonde_id").sel(altitude=0).values
-    )  # 9182267570514704
+    qsfc = beachdata[key].q.mean(dim="sonde_id").sel(altitude=0).values
+    adiabat_list = []
+    for name, ma_fct in adiabat_fct.items():
+        adiabat = ma.make_sounding_from_adiabat(
+            ma_fct=ma_fct,
+            P=P,
+            Tsfc=sfcT,
+            qsfc=qsfc,
+            Tmin=195,
+        )
+        adiabat = xr.concat(
+            [
+                adiabat,
+                radbeach[["t", "p"]]
+                .mean("sonde_id")
+                .rename({"t": "T", "p": "P"})
+                .sel(altitude=slice(adiabat.altitude.max().values, None)),
+            ],
+            dim="altitude",
+            compat="no_conflicts",
+        )
+        adiabat = (
+            adiabat.where(adiabat.T > 195)
+            .interpolate_na("altitude", method="akima")
+            .assign(adiabat=name)
+        )
+        adiabat_list.append(adiabat)
+        if np.all(alt == 0):
+            alt = adiabat_list[0].altitude
+    adiabat_list = [adiabat.interp(altitude=alt) for adiabat in adiabat_list]
+    adiabat_dict[key] = xr.concat(adiabat_list, dim="adiabat")
 
-    pseudo = ph.make_sounding_from_adiabat(
-        P,
-        sfcT,
-        qsfc,
-        thx=mtf.theta_e,  # _bolton,
-        Tmin=195,
-    )
-    pseudo = xr.concat(
+adiabat_ds = xr.concat(
+    [adiabat_dict[key].assign(cth=key) for key in adiabat_dict.keys()],
+    dim="cth",
+)
+# %%
+for adiabat in ["pseudo", "reversible"]:  # adiabat_ds.adiabat.values:
+    # adiabat_ds.sel(adiabat=adiabat, cth="CTH < 4 km").T.plot(label=adiabat)
+    adiabat_ds.sel(cth="CTH 4-8 km", adiabat=adiabat).T.plot()
+
+plt.legend()
+# %% assign C-shaped RH
+
+
+qkwargs = {
+    "CTH < 4 km": {
+        "rhmid": 0.5,
+        "rhlcl": 0.9,
+        "rhtoa": 0.6,
+        "Tmin": 280,
+        "zlcl": 440,
+        "es": es,
+        "factor": 0.4,
+        "lowlim": 286,
+        "highlim": 260,
+    },
+    "CTH 4-8 km": {
+        "rhmid": 0.32,
+        "rhlcl": 0.87,
+        "rhtoa": 0.4,
+        "Tmin": 250,
+        "zlcl": 510,
+        "es": es,
+        "factor": 0.67,
+        "lowlim": 287,
+        "highlim": 255,
+    },
+    "CTH > 8 km": {
+        "rhmid": 0.42,  # 0.42
+        "rhlcl": 0.88,  # 0.9
+        "rhtoa": 0.7,  # 0.35
+        "Tmin": 250,  # 250
+        "zlcl": 543,
+        "es": es,
+        "factor": 0.52,  # 0.52
+        "lowlim": 285,
+        "highlim": 255,  # 262
+    },
+}
+
+
+qrev = {}
+qpseu = {}
+ad = "reversible"
+rev = adiabat_ds.sel(adiabat=ad)
+for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:  #
+    pseu = adiabat_ds.sel(adiabat="pseudo", cth=cth)
+    ds = rev.sel(cth=cth)
+    qrev[cth] = ds
+    qpseu[cth] = pseu
+    for qname, qshape in zip(["c", "e"], [rad.cshape_humidity, rad.wshape_humidity]):
+        qrev[cth] = (
+            qrev[cth]
+            .assign({qname + "q": (("altitude",), qshape(ds, **qkwargs[cth]).values)})
+            .assign(cth=cth, adiabat=ad)
+        )
+        qrev[cth] = qrev[cth].assign(
+            {
+                qname + "rh": mtf.specific_humidity_to_relative_humidity(
+                    q=qrev[cth][qname + "q"], p=qrev[cth].P, T=qrev[cth].T, es=es
+                )
+            }
+        )
+
+        rhfree = qrev[cth].sel(
+            altitude=slice(
+                qkwargs[cth]["zlcl"], qrev[cth].altitude[qrev[cth].T.argmin()]
+            )
+        )
+        rhfree_pseud = pseu
+        rhfree_pseud = rhfree_pseud.sel(
+            altitude=slice(
+                qkwargs[cth]["zlcl"], rhfree_pseud.altitude[rhfree_pseud.T.argmin()]
+            )
+        )
+
+        rh_ps = (
+            rhfree.swap_dims({"altitude": "T"})
+            .interp(T=rhfree_pseud.T.values, kwargs={"fill_value": "extrapolate"})
+            .assign(altitude=("T", rhfree_pseud.altitude.values))
+            .swap_dims({"T": "altitude"})
+            .interp_like(pseu)
+            .reset_coords("T")
+        )
+        qpseu[cth] = qpseu[cth].assign(
+            {
+                qname + "q": mtf.relative_humidity_to_specific_humidity(
+                    rh_ps[qname + "rh"], pseu.P, pseu.T, es=es
+                )
+                .bfill("altitude")
+                .ffill("altitude")
+            }
+        )
+        qpseu[cth] = qpseu[cth].assign(
+            {
+                qname + "rh": mtf.specific_humidity_to_relative_humidity(
+                    qpseu[cth][qname + "q"], qpseu[cth].P, qpseu[cth].T, es=es
+                )
+            }
+        )
+
+    rhpseu = xr.concat([qpseu[cth] for cth in qpseu.keys()], dim="cth")
+    adiabat_ds = xr.merge(
         [
-            pseudo,
-            radbeach[["t", "p"]]
-            .mean("sonde_id")
-            .rename({"t": "T", "p": "P"})
-            .sel(altitude=slice(pseudo.altitude.max().values, None)),
-        ],
-        dim="altitude",
-        compat="no_conflicts",
+            adiabat_ds,
+            xr.concat(
+                [
+                    xr.concat([qpseu[cth] for cth in qpseu.keys()], dim="cth"),
+                    xr.concat([qrev[cth] for cth in qrev.keys()], dim="cth"),
+                ],
+                dim="adiabat",
+            ),
+        ]
     )
-    pseudo = pseudo.where(pseudo.T > 195).interpolate_na("altitude", method="akima")
-    pseudos[key] = pseudo
-    plcl = mtf.plcl_bolton(T=sfcT, P=Psfc, qt=qsfc)
-    zlcl[key] = mtf.zlcl(plcl, T=sfcT, P=Psfc, qt=qsfc, z=0)
+
+    print(adiabat_ds)
+    """
+    adiabat_ds = adiabat_ds.assign(
+        xr.concat([
+        xr.concat([qpseu[cth] for cth in qpseu.keys()], dim="cth"),
+        xr.concat([qrev[cth] for cth in qrev.keys()], dim="cth")
+        ], dim="adiabat")
+    ) 
+    """
 # %%
+cw = 190 / 25.4
+sns.set_context("talk", font_scale=0.8)
+colors = sns.color_palette("Paired")
+fig, ax = plt.subplots()
+for idx, cth in enumerate(["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]):
+    if idx == 0:
+        idlabel = "idealized E-shape"
+        dotlabel = "idealized C-shape"
+    else:
+        idlabel = ""
+        dotlabel = ""
+    for adiabat in ["reversible"]:
+        """
+        """
+        ax.plot(
+            adiabat_ds.sel(adiabat=adiabat, cth=cth).erh,
+            adiabat_ds.sel(adiabat=adiabat, cth=cth).T,
+            label=idlabel,
+            color=colors[2 * idx],
+        )
+        ax.plot(
+            adiabat_ds.sel(adiabat=adiabat, cth=cth).crh,
+            adiabat_ds.sel(adiabat=adiabat, cth=cth).T,
+            color=colors[2 * idx + 1],
+            alpha=0.5,
+            label=dotlabel,
+            linestyle=":",
+        )
 
-# %%
-qkwargs = {}
-es = mtf.make_es_mxd(
-    svp.liq_wagner_pruss, svp.ice_wagner_etal
-)  # svp.liq_wagner_pruss #
-qkwargs["CTH < 4 km"] = {
-    "rhmid": 0.4,
-    "rhlcl": 0.9,
-    "rhtoa": 0.3,
-    "Tmin": 270,
-    "es": es,
-    "factor": 0.42,
-    "lowlim": 286,
-    "highlim": 260,
-}
-qkwargs["CTH 4-8 km"] = {
-    "rhmid": 0.32,
-    "rhlcl": 0.9,
-    "rhtoa": 0.4,
-    "Tmin": 250,
-    "es": es,
-    "factor": 0.67,
-    "lowlim": 285,
-    "highlim": 255,
-}
-qkwargs["CTH > 8 km"] = {
-    "rhmid": 0.42,
-    "rhlcl": 0.9,
-    "rhtoa": 0.7,
-    "Tmin": 250,
-    "es": es,
-    "factor": 0.52,
-    "lowlim": 285,
-    "highlim": 262,
-}
-fig, ax = plt.subplots(figsize=(6, 4))
-for key, ls in zip(["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"], ["--", ":", "-"]):
-    ds = beachdata[key]
     ax.plot(
-        ds.rh.mean("sonde_id"),
-        ds.ta.mean("sonde_id"),
-        linestyle=ls,
-        label=key,
+        beachdata[cth].rh.mean("sonde_id"),
+        beachdata[cth].ta.mean("sonde_id"),
+        label="BEACH " + cth,
+        color=colors[2 * idx + 1],
     )
-    qclow = rad.wshape_humidity(pseudos[key], zlcl=zlcl[key], **qkwargs[key])
-    ax.plot(
-        mtf.specific_humidity_to_relative_humidity(
-            qclow,
-            pseudos[key].P,
-            pseudos[key].T,
-            es=es,
-        ),
-        pseudos[key].T,
-    )
-ax.set_xlim(0, 1)
-ax.invert_yaxis()
-# ax.set_ylim(305, 270)
-# ax.set_ylim(0, 20000)
 
-
-# %%
-qc = {"real": {}, "pseudo": {}}
-qe = {"real": {}, "pseudo": {}}
-qr = {"real": {}, "pseudo": {}}
-alts = {"CTH < 4 km": 10000, "CTH 4-8 km": 12500, "CTH > 8 km": 12500}
-for key in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
-    histreal = histogram(
-        beachdata[key].ta,
-        bins=[np.arange(220, 305, 0.5)],
-        dim=["altitude"],
-        weights=beachdata[key].rh,
-    ) / histogram(
-        beachdata[key].ta,
-        bins=[np.arange(220, 305, 0.5)],
-        dim=["altitude"],
-    )
-    qcreal = mtf.relative_humidity_to_specific_humidity(
-        histreal.mean("sonde_id").interp(
-            ta_bin=pseudos[key].T, kwargs={"fill_value": "extrapolate"}
-        ),
-        pseudos[key].P,
-        pseudos[key].T,
-        es=es,
-    )
-    qc["pseudo"][key] = rad.cshape_humidity(
-        pseudos[key], zlcl=zlcl[key], **qkwargs[key]
-    )
-    qe["pseudo"][key] = rad.wshape_humidity(
-        pseudos[key], zlcl=zlcl[key], **qkwargs[key]
-    )
-    qr["pseudo"][key] = xr.concat(
-        [
-            qcreal.sel(altitude=slice(None, alts[key])).drop(["ta_bin"]),
-            qc["pseudo"][key].sel(altitude=slice(alts[key], None)),
-        ],
-        dim="altitude",
-    )
-# %% RH "fit" control
-
-sns.set_palette("Paired")
-
-fig, ax = plt.subplots(figsize=(6, 4))
-for k in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
-    ax.plot(
-        mtf.specific_humidity_to_relative_humidity(
-            qe["pseudo"][k],
-            pseudos[k].P,
-            pseudos[k].T,
-            es=es,
-        ),
-        pseudos[k].altitude,
-        linestyle=ls,
-    )
-    ax.plot(
-        mtf.specific_humidity_to_relative_humidity(
-            qr["pseudo"][k],
-            pseudos[k].P,
-            pseudos[k].T,
-            es=es,
-        ),
-        pseudos[k].altitude,
-        linestyle=ls,
-        label=k,
-    )
 
 ax.legend()
 ax.set_xlim(0, 1)
-ax.set_ylim(0, 20000)
-# ax.invert_yaxis()
-# ax.set_ylim(305, 220)
-sns.despine()
-fig.savefig(file_path + "rh_idealized_profiles.pdf")
-
-
-# %%
-q = qc["pseudo"]["CTH < 4 km"]
-atm = rad.make_atmosphere(
-    pseudo.P.values.reshape(1, pseudo.P.shape[0]),
-    pseudo.T.values.reshape(1, pseudo.P.shape[0]),
-    ph.specific_humidity2vmr(q).values.reshape(1, pseudo.P.shape[0]),
-    o3=radbeach.O3.interp(altitude=pseudo.altitude).values,
-)
-
-gas_optics_lw = GasOptics(gas_optics_file=GasOpticsFiles.LW_G256)
-op_lw = gas_optics_lw.compute(atm, add_to_input=False)
+ax.invert_yaxis()
+ax.set_xlabel("RH / 1")
+ax.set_ylabel(r"$T$ / K")
+sns.despine(offset={"bottom": 10})
+fig.savefig(file_path + "mlcloud-rh_idealized_profiles.pdf")
 
 
 # %%
