@@ -17,7 +17,7 @@ import radiation_for_sondes.rrtmg.rad_helper as rad
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
-levante = False
+levante = True
 
 if levante:
     from pyrte_rrtmgp.rrtmgp import GasOptics
@@ -483,12 +483,24 @@ for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
 
 xr.concat(cths, dim="cth").to_netcdf(file_path + "idealized_radiation_profiles.nc")
 
+cths = []
+for cth in ["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]:
+    qs = []
+    for qvar in ["c", "e"]:
+        ds = real_ds.sel(cth=cth)
+        qs.append(
+            calc_radiation(ds, qvar=qvar + "q").assign_coords(
+                cth=cth, rhshape=qvar, adiabat="BEACH"
+            )
+        )
+    cths.append(xr.concat(qs, dim="rhshape"))
+xr.concat(cths, dim="cth").to_netcdf(file_path + "real_radiation_profiles.nc")
 
 # %%
 ds = xr.open_dataset(file_path + "idealized_radiation_profiles.nc").sel(
     cth="CTH 4-8 km"
 )
-
+real = xr.open_dataset(file_path + "real_radiation_profiles.nc").sel(cth="CTH 4-8 km")
 colors = ["#006C66", "#EF7C00"]
 
 fig, ax = plt.subplots(figsize=(cw, 0.5 * cw))
@@ -515,7 +527,28 @@ for ad, ls in zip(["reversible", "pseudo"], ["-", ":"]):
         c="red",
         linestyle=ls,
     )
-
+pltds = real.sel(rhshape="e").sel(column=0)
+ax.plot(
+        60 * 60 * 24 * pltds.lw_htgr,
+        pltds.altitude,
+        label="LW heating rate",
+        c=colors[0],
+        linestyle="--",
+    )
+ax.plot(
+        60 * 60 * 24 * pltds.sw_htgr.mean("mu0"),
+        pltds.altitude,
+        label="SW mean",
+        c=colors[1],
+        linestyle="--",
+    )
+ax.plot(
+    60 * 60 * 24 * pltds.sw_htgr.sel(mu0=12),
+    pltds.altitude,
+    label="SW heatingrate noon",
+    c="red",
+    linestyle="--",
+)
 ax.set_ylim(0, 15000)
 ax.set_xlim(-3, 3)
 ax.legend()
