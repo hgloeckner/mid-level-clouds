@@ -17,7 +17,7 @@ import radiation_for_sondes.rrtmg.rad_helper as rad
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
-levante = True
+levante = False
 
 if levante:
     from pyrte_rrtmgp.rrtmgp import GasOptics
@@ -389,7 +389,14 @@ ax.set_xlim(0, 1)
 ax.invert_yaxis()
 ax.set_xlabel("RH / 1")
 ax.set_ylabel(r"$T$ / K")
+
+ax.spines["bottom"].set_linewidth(1)
+ax.spines["left"].set_linewidth(1)
+ax.xaxis.set_tick_params(width=1)
+ax.yaxis.set_tick_params(width=1)
 sns.despine(offset={"bottom": 10})
+fig.tight_layout()
+
 fig.savefig(file_path + "mlcloud-rh_idealized_profiles.pdf")
 
 
@@ -529,19 +536,19 @@ for ad, ls in zip(["reversible", "pseudo"], ["-", ":"]):
     )
 pltds = real.sel(rhshape="e").sel(column=0)
 ax.plot(
-        60 * 60 * 24 * pltds.lw_htgr,
-        pltds.altitude,
-        label="LW heating rate",
-        c=colors[0],
-        linestyle="--",
-    )
+    60 * 60 * 24 * pltds.lw_htgr,
+    pltds.altitude,
+    label="LW heating rate",
+    c=colors[0],
+    linestyle="--",
+)
 ax.plot(
-        60 * 60 * 24 * pltds.sw_htgr.mean("mu0"),
-        pltds.altitude,
-        label="SW mean",
-        c=colors[1],
-        linestyle="--",
-    )
+    60 * 60 * 24 * pltds.sw_htgr.mean("mu0"),
+    pltds.altitude,
+    label="SW mean",
+    c=colors[1],
+    linestyle="--",
+)
 ax.plot(
     60 * 60 * 24 * pltds.sw_htgr.sel(mu0=12),
     pltds.altitude,

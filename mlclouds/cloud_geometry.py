@@ -49,12 +49,13 @@ no_wv = no_wv.where((no_wv.bsrgl_flags == 0) | (no_wv.bsrgl_flags == 8)).sortby(
 
 # %%
 wales = {}
-radar = {}
 wales["full"] = xr.DataArray(
     data=dh.find_highest_cloud_altitude(no_wv.sel(altitude=slice(200, None))),
     dims="time",
     name="cloud-top",
 )
+# %%
+radar = {}
 radar["full"] = xr.DataArray(
     data=dh.find_highest_cloud_altitude(
         rdata.sel(altitude=slice(200, None)),
@@ -68,6 +69,7 @@ radar["full"] = xr.DataArray(
 radar["full"] = radar["full"].assign_coords(
     time=rdata.time, longitude=rdata.longitude, latitude=rdata.latitude
 )
+# %%
 wales["full"] = wales["full"].assign_coords(
     time=no_wv.time, longitude=no_wv.longitude, latitude=no_wv.latitude
 )
@@ -79,8 +81,9 @@ shipradar = xr.open_dataset(
 sradar["full"] = shipradar.cloud_top_height_agl.rename("cloud-top")
 
 # %%
-sns.set_context("paper", font_scale=1.3)
-fig, ax = plt.subplots(figsize=(8, 5))
+cw = 190 / 25.4
+sns.set_context("talk", font_scale=0.8)
+fig, ax = plt.subplots(figsize=(cw, 0.6 * cw))
 histkwargs = {
     "stat": "density",
     "bins": 30,
@@ -160,24 +163,53 @@ ax.set_yticks(
         0,
         2000,
         4000,
-        5460,
-        5819,
-        6560,
+        5390,
+        5878,
+        6585,
         8000,
-        10000,
+        # 10000,
         12000,
-        14000,
-    ]
+        # 14000,
+    ],
+    labels=[
+        0,
+        2000,
+        4000,
+        5390,
+        "",
+        6585,
+        8000,
+        # 10000,
+        12000,
+        # 14000,
+    ],
 )
+ax.text(
+    2.3e-4,
+    5878,
+    "5880",
+    verticalalignment="center",
+)
+
+ax.set_xticks([0, 1e-4, 2e-4, 3e-4, 4e-4])
 sns.despine()
 ax.legend()
+
+ax.spines["bottom"].set_linewidth(1)
+ax.spines["left"].set_linewidth(1)
+
+ax.xaxis.set_tick_params(width=1)
+ax.yaxis.set_tick_params(width=1)
 ax.set_ylim(0, 14000)
 ax.set_ylabel("Cloud Top Altitude / m")
 fig.tight_layout()
-fig.savefig("../plots/cloud_top_altitude_distribution.pdf")
+fig.savefig("../plots/cloud_top_altitude_distribution_mean.pdf")
+# %%
 fig.savefig(
     "/scratch/m/m301046/cloud_top_altitude_distribution_mean.pdf", transparent=True
 )
+# %%
+
 # %%
 """
 region = [
