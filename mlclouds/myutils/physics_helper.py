@@ -15,13 +15,19 @@ def calc_Tv(T, mr):
 
 
 def get_csc_stab(rho, stability, H):
+    cp = mtc.cpd
+    Q = H * (cp * rho)
     grad_stability = stability.differentiate("altitude")
-    return 1 / (stability) ** 2 / rho * H * grad_stability
+    return (
+        -Q / cp / (stability**2) * grad_stability
+    )  # 1 / (stability) ** 2 / rho * H * grad_stability
 
 
 def get_csc_cooling(rho, stability, H):
-    grad_H = H.differentiate("altitude")
-    return -1 / stability / rho * grad_H
+    cp = mtc.cpd
+    Q = H * (cp * rho)
+    grad_H = Q.differentiate("altitude")
+    return 1 / stability / cp * grad_H
 
 
 def get_stability(theta, T):
