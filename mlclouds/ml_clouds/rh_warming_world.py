@@ -84,23 +84,29 @@ newcshape = mtf.specific_humidity_to_relative_humidity(
 
 colors = ["#006C66", "#EF7C00"]
 cw = 190 / 25.4
-sns.set_context("talk", font_scale=0.8)
+sns.set_context("paper")
 fig, axes = plt.subplots(ncols=2, figsize=(cw, 0.6 * cw))
 axes[0].plot(
     mtf.specific_humidity_to_relative_humidity(cshape, P, adiabat[refname].T, es=es),
     P / 100,
     color=colors[0],
     label=r"$T_{\text{s}} = $" + str(Ts[0]),
+    linewidth=2,
 )
 axes[0].plot(
-    newcshape, P / 100, color=colors[1], label=r"$T_{\text{s}} = $" + str(Ts[1])
+    newcshape,
+    P / 100,
+    color=colors[1],
+    label=r"$T_{\text{s}} = $" + str(Ts[1]),
+    linewidth=2,
 )
 axes[1].plot(
     mtf.specific_humidity_to_relative_humidity(cshape, P, adiabat[refname].T, es=es),
     adiabat[refname].T,
     color=colors[0],
+    linewidth=2,
 )
-axes[1].plot(newcshape, adiabat[name].T, color=colors[1])
+axes[1].plot(newcshape, adiabat[name].T, color=colors[1], linewidth=2)
 axes[0].invert_yaxis()
 axes[1].invert_yaxis()
 axes[0].legend()
@@ -111,5 +117,5 @@ axes[0].set_ylabel(r"$p$ / hPa")
 axes[1].set_ylabel(r"$T$ / K")
 
 sns.despine(offset={"bottom": 10})
-fig.savefig("../../plots/idealized_rh.pdf")
+fig.savefig("../../plots/idealized_rh.pdf", bbox_inches="tight")
 # %%

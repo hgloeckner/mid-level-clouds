@@ -1,4 +1,7 @@
 # %%
+from turtle import title
+
+from matplotlib.lines import Line2D
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -334,70 +337,100 @@ real_ds = xr.concat([qreal[cth] for cth in qreal.keys()], dim="cth")
 
 
 # %%
+
+from matplotlib.lines import Line2D
+
+lbls = {
+    "CTH < 4 km": "< 4 km",
+    "CTH 4-8 km": "4-8 km",
+    "CTH > 8 km": "> 8 km",
+}
 cw = 190 / 25.4
+altslice = slice(0, 17500)
 sns.set_context("talk", font_scale=0.8)
+handles = []
+labels_out = []
+end = "data"
+
 colors = sns.color_palette("Paired")
 fig, ax = plt.subplots()
-for idx, cth in enumerate(["CTH < 4 km", "CTH 4-8 km", "CTH > 8 km"]):
+for idx, (cth, beach_slice) in enumerate(
+    [
+        ("CTH < 4 km", slice(0, 12500)),
+        ("CTH 4-8 km", slice(0, 12000)),
+        ("CTH > 8 km", slice(0, 12500)),
+    ]
+):
     if idx == 0:
-        idlabel = "idealized E-shape"
-        dotlabel = "idealized C-shape"
+        idlabel = "E-shape"
+        dotlabel = "C-shape"
     else:
         idlabel = ""
         dotlabel = ""
     for adiabat in ["reversible"]:
-        """
-        """
-        ax.plot(
-            adiabat_ds.sel(adiabat=adiabat, cth=cth).erh,
-            adiabat_ds.sel(adiabat=adiabat, cth=cth).T,
-            label=idlabel,
-            color=colors[2 * idx],
-        )
-        ax.plot(
-            adiabat_ds.sel(adiabat=adiabat, cth=cth).crh,
-            adiabat_ds.sel(adiabat=adiabat, cth=cth).T,
-            color=colors[2 * idx + 1],
-            alpha=0.5,
-            label=dotlabel,
-            linestyle=":",
-        )
+        if "c" in end:
+            ax.plot(
+                adiabat_ds.sel(adiabat=adiabat, cth=cth, altitude=altslice).crh,
+                adiabat_ds.sel(adiabat=adiabat, cth=cth, altitude=altslice).T,
+                color=colors[2 * idx + 1],
+                alpha=0.5,
+                label=dotlabel,
+                linestyle=":",
+            )
+        if "e" in end:
+            ax.plot(
+                adiabat_ds.sel(adiabat=adiabat, cth=cth, altitude=altslice).erh,
+                adiabat_ds.sel(adiabat=adiabat, cth=cth, altitude=altslice).T,
+                label=idlabel,
+                color=colors[2 * idx],
+            )
 
     ax.plot(
-        beachdata[cth].rh.mean("sonde_id"),
-        beachdata[cth].ta.mean("sonde_id"),
-        label="BEACH " + cth,
+        beachdata[cth].rh.mean("sonde_id").sel(altitude=beach_slice),
+        beachdata[cth].ta.mean("sonde_id").sel(altitude=beach_slice),
+        label=lbls[cth],
         color=colors[2 * idx + 1],
     )
-    """
-    ax.plot(
-        real_ds.sel(cth=cth).crh,
-        real_ds.sel(cth=cth).T,
-        color="k"
 
+    handles, labels = ax.get_legend_handles_labels()
+    split_at = labels.index("< 4 km")  # start of the cloud-top-height group
+
+    if end != "data":
+        legend1 = ax.legend(
+            handles[:split_at],
+            labels[:split_at],
+            loc="upper right",
+            bbox_to_anchor=(1.05, 0.95),
+        )
+
+        ax.add_artist(legend1)
+
+    legend2 = ax.legend(
+        handles[split_at:],
+        labels[split_at:],
+        loc="upper right",
+        bbox_to_anchor=(1.05, 0.75),
+        title="Cloud-top height",
     )
-    ax.plot(
-        real_ds.sel(cth=cth).erh,
-        real_ds.sel(cth=cth).T,
-        color="k"
 
+    ax.set_xlim(0, 1)
+    if idx == 0:
+        ax.invert_yaxis()
+    ax.set_xlabel("RH / 1")
+    ax.set_ylabel(r"$T$ / K")
+    ax.set_ylim(305, 195)
+
+    ax.spines["bottom"].set_linewidth(1)
+    ax.spines["left"].set_linewidth(1)
+    ax.xaxis.set_tick_params(width=1)
+    ax.yaxis.set_tick_params(width=1)
+    sns.despine(offset={"bottom": 10})
+
+    fig.savefig(
+        file_path + f"mlcloud-rh_idealized_profiles_{idx}_{end}.pdf",
+        bbox_inches="tight",
+        transparent=True,
     )
-    """
-
-ax.legend()
-ax.set_xlim(0, 1)
-ax.invert_yaxis()
-ax.set_xlabel("RH / 1")
-ax.set_ylabel(r"$T$ / K")
-
-ax.spines["bottom"].set_linewidth(1)
-ax.spines["left"].set_linewidth(1)
-ax.xaxis.set_tick_params(width=1)
-ax.yaxis.set_tick_params(width=1)
-sns.despine(offset={"bottom": 10})
-fig.tight_layout()
-
-fig.savefig(file_path + "mlcloud-rh_idealized_profiles.pdf")
 
 
 # %%
