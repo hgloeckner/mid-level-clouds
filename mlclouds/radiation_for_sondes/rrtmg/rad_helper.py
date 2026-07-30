@@ -91,3 +91,24 @@ def wshape_humidity(
     rh = rh.interpolate_na("altitude", method="quadratic")
     qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.P, ds.T, es=es)
     return qrh.ffill(dim="altitude").bfill(dim="altitude")
+
+
+def mixing_ratio2vmr(w):
+    Md = mtc.md
+    Mw = mtc.molar_mass_h2o
+
+    return w / (w + Mw / Md)
+
+
+def specific_humidity2vmr(q):
+    Md = mtc.md
+    Mw = mtc.molar_mass_h2o
+
+    return q / ((1 - q) * Mw / Md + q)
+
+
+def vmr2specific_humidity(x):
+    Md = mtc.md
+    Mw = mtc.molar_mass_h2o
+
+    return x / ((1 - x) * Md / Mw + x)

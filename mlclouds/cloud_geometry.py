@@ -29,7 +29,7 @@ wv, no_wv = od.open_wales(masked=False, local=True)
 
 cid = "ipns://latest.orcestra-campaign.org"  # open_datasets.get_cid()
 dropsondes = xr.open_dataset(
-    f"{cid}/products/HALO/dropsondes/Level_3/PERCUSION_Level_3.zarr",
+    "ipfs://bafybeiczbv7mycr2jois6t4dq3zwiltycomwo5xxvjqcjz2ot3newzar6q",
     engine="zarr",
 )
 rdata = xr.open_dataset(
@@ -82,8 +82,8 @@ sradar["full"] = shipradar.cloud_top_height_agl.rename("cloud-top")
 
 # %%
 cw = 190 / 25.4
-sns.set_context("talk", font_scale=0.8)
-fig, ax = plt.subplots(figsize=(cw, 0.6 * cw))
+sns.set_context("paper")
+fig, ax = plt.subplots(figsize=(0.7 * cw, 0.5 * cw))
 histkwargs = {
     "stat": "density",
     "bins": 30,
@@ -149,15 +149,16 @@ for c, name in zip(["#FF7982", "#B6001E", "#00b4d8"], ["north", "east", "west"])
     )
 """
 
-ax.axhline(5799.8, xmax=0.5, color="k", alpha=0.5)
-ax.axhline(5859.83, xmax=0.5, color="k", linestyle="--", alpha=0.5)
-ax.axhline(6584.25, xmax=0.5, color="#FF7982", alpha=0.5, label="North", linewidth=2)
-ax.axhline(6363.27, xmax=0.5, linestyle="--", color="#FF7982", alpha=0.5, linewidth=2)
-ax.axhline(5817.79, xmax=0.5, color="#B6001E", alpha=0.5, label="East", linewidth=2)
-ax.axhline(6005.63, xmax=0.5, linestyle="--", color="#B6001E", alpha=0.5, linewidth=2)
-ax.axhline(5389.24, xmax=0.5, color="#00b4d8", alpha=0.5, label="West", linewidth=2)
-ax.axhline(5320.47, xmax=0.5, linestyle="--", color="#00b4d8", alpha=0.5, linewidth=2)
-
+ax.axhline(5799.8, xmax=0.5, color="k", alpha=0.5, linewidth=1)
+ax.axhline(5859.83, xmax=0.5, color="k", linestyle="--", alpha=0.5, linewidth=1)
+"""
+ax.axhline(6584.25, xmax=0.5, color="#FF7982", alpha=0.5, label="North", linewidth=1)
+ax.axhline(6363.27, xmax=0.5, linestyle="--", color="#FF7982", alpha=0.5,  linewidth=1)
+ax.axhline(5817.79, xmax=0.5, color="#B6001E", alpha=0.5, label="East", linewidth=1)
+ax.axhline(6005.63, xmax=0.5, linestyle="--", color="#B6001E", alpha=0.5, linewidth=1)
+ax.axhline(5389.24, xmax=0.5, color="#00b4d8", alpha=0.5, label="West", linewidth=1)
+ax.axhline(5320.47, xmax=0.5, linestyle="--", color="#00b4d8", alpha=0.5, linewidth=1)
+"""
 ax.set_yticks(
     [
         0,
@@ -173,21 +174,21 @@ ax.set_yticks(
     ],
     labels=[
         0,
-        2000,
-        4000,
-        5390,
+        2,
+        4,
+        5.4,
         "",
-        6585,
-        8000,
+        6.6,
+        8,
         # 10000,
-        12000,
+        12,
         # 14000,
     ],
 )
 ax.text(
     2.3e-4,
     5878,
-    "5880",
+    "5.9",
     verticalalignment="center",
 )
 
@@ -195,15 +196,19 @@ ax.set_xticks([0, 1e-4, 2e-4, 3e-4, 4e-4])
 sns.despine()
 ax.legend()
 
-ax.spines["bottom"].set_linewidth(1)
-ax.spines["left"].set_linewidth(1)
+# ax.spines["bottom"].set_linewidth(1)
+# ax.spines["left"].set_linewidth(1)
 
-ax.xaxis.set_tick_params(width=1)
-ax.yaxis.set_tick_params(width=1)
+# ax.xaxis.set_tick_params(width=1)
+# ax.yaxis.set_tick_params(width=1)
 ax.set_ylim(0, 14000)
-ax.set_ylabel("Cloud Top Altitude / m")
-fig.tight_layout()
-fig.savefig("../plots/cloud_top_altitude_distribution_mean.pdf")
+ax.set_ylabel("cloud top altitude / km")
+ax.set_xlabel("density")
+fig.savefig(
+    "../plots/cloud_top_altitude_distribution_mean.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
 # %%
 fig.savefig(
     "/scratch/m/m301046/cloud_top_altitude_distribution_mean.pdf", transparent=True
