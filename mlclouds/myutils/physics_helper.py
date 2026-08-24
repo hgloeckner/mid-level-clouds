@@ -1,7 +1,9 @@
+import astropy
 import numpy as np
 import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.utilities as mtu
 import moist_thermodynamics.functions as mtf
+from moist_thermodynamics.saturation_vapor_pressures import es
 import xarray as xr
 
 
@@ -140,6 +142,12 @@ def get_wdir_and_wspd(u, v):
     return wdir, wspd
 
 
+
+P = np.arange(100900.0, 4000.0, -500)
+Rv = mtc.Rv
+Rd = mtc.Rd
+
+
 def make_sounding_from_adiabat(
     P, Tsfc=301.0, qsfc=17e-3, Tmin=200.0, thx=mtf.theta_l, integrate=False
 ) -> xr.Dataset:
@@ -201,9 +209,112 @@ def make_sounding_from_adiabat(
         )
     )
     TPq = TPq.assign(
+        Trho=(
+            TPq.T.dims,
+            (
+                TPq.T
+                * (
+                    1.0
+                    - TPq.q
+                    + mtf.saturation_partition(TPq.P, es(TPq.T), TPq.q) * Rv / Rd
+                )
+            ).values,
+            {
+                "units": "K",
+                "standard_name": "density temperature",
+                "symbol": "$T_\rho$",
+            },
+        )
+    )
+    TPq = TPq.assign(
+        theta_rho=(
+            TPq.T.dims,
+            (
+                TPq.theta
+                * (
+                    1.0
+                    - TPq.q
+                    + mtf.saturation_partition(TPq.P, es(TPq.T), TPq.q) * Rv / Rd
+                )
+            ).values,
+            {
+                "units": "K",
+                "standard_name": "density potential temperature",
+                "symbol": "$T_\rho$",
+            },
+        )
+    )
+    TPq = TPq.assign(
         P0=xr.DataArray(
             mtc.P0, attrs={"units": "Pa", "standards_name": "referenece_pressure"}
         )
     )
 
     return TPq.set_coords("altitude").swap_dims({"levels": "altitude"})
+
+def get_arts_sun_pos(time):
+    
+    time = astropy.time.Time(time, scale="utc")
+
+    sun = astropy.coordinates.get_sun(time)  # GCRS RA/Dec/distance
+    distance_m = sun.distance.to(astropy.units.m).value
+
+    gmst = time.sidereal_time("mean", "greenwich")  # in hourangle
+    subsolar_lon = (sun.ra - gmst).wrap_at(180 * astropy.units.deg).deg
+    subsolar_lat = sun.dec.deg
+
+    return [distance_m, subsolar_lat, subsolar_lon]
+
+
+
+
+def uniform_humidity(ds, zlcl, ztoa, rh, es=mtf.es_default):
+    qrh = mtf.relative_humidity_to_specific_humidity(RH=rh, p=ds.p, T=ds.ta, es=es)
+    qrh = qrh.where((qrh.altitude >= zlcl) & (qrh.altitude <= ztoa))
+    return qrh.ffill(dim="altitude").bfill(dim="altitude")
+
+
+def cshape_humidity(
+    ds, zlcl, rhmid, rhlcl, rhtoa, Tmin=260, es=mtf.es_default, **kwargs
+):
+    rh = xr.DataArray(
+        np.full_like(ds.ta.values, np.nan),
+        dims=("altitude",),
+        coords={"altitude": ds.altitude},
+    )
+
+    rh[ds.ta.argmin()] = rhtoa
+    rh[np.abs(ds.ta - Tmin).argmin()] = rhmid
+    rh[np.abs(ds.altitude - zlcl).argmin()] = rhlcl
+    rh = rh.interpolate_na("altitude", method="quadratic")
+    qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.p, ds.ta, es=es)
+    return qrh.ffill(dim="altitude").bfill(dim="altitude")
+
+
+def eshape_humidity(
+    ds,
+    zlcl,
+    rhmid,
+    rhlcl,
+    rhtoa,
+    lowlim=280,
+    highlim=265,
+    factor=0.5,
+    Tmin=260,
+    es=mtf.es_default,
+):
+    rh = xr.DataArray(
+        np.full_like(ds.ta.values, np.nan),
+        dims=("altitude",),
+        coords={"altitude": ds.altitude},
+    )
+
+    rh[ds.ta.argmin()] = rhtoa
+    rh[np.abs(ds.ta - Tmin).argmin()] = rhmid
+    rh[np.abs(ds.altitude - zlcl).argmin()] = rhlcl
+    rh = rh.interpolate_na("altitude", method="quadratic")
+    rh = rh.where((ds.ta <= highlim) | (ds.ta >= lowlim))
+    rh[np.abs(ds.ta - 273.15).argmin()] = (rhmid + rhlcl) * factor
+    rh = rh.interpolate_na("altitude", method="quadratic")
+    qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.p, ds.ta, es=es)
+    return qrh.ffill(dim="altitude").bfill(dim="altitude")
