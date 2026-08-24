@@ -43,3 +43,4 @@ dependencies:
     - ipfsspec>=0.5.3
     - moist_thermodynamics
     - orcestra
+    - git+https://github.com/atmtools/pyarts-fluxes
