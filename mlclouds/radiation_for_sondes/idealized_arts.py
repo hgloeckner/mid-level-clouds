@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 #SBATCH --account=mh0066
 #SBATCH --partition=compute
-#SBATCH --array=0-1%10
 #SBATCH --time=08:00:00
+#SBATCH --array=0-1
 
-
-import os
+import os  
 import dask
 import numpy as np
 import xarray as xr
 import pyarts
 from pyarts.arts import convert
 import FluxSimulator as fsm
-import time
 import sys
 import argparse
 
@@ -20,9 +18,15 @@ sys.path.append("/home/m/m301046/code/mid_level_clouds/mlclouds/")
 
 from radiation_for_sondes import rad_helper as rh
 import myutils.physics_helper as ph
+import time
 
 
-sondes_for_rad = "/work/mh0066/m301046/data/mlclouds/radiation_profiles.nc"
+exp_name = "beach"
+mean_day = np.datetime64("2024-09-01")
+mean_lat = 9
+mean_lon = -40
+
+sondes_for_rad = "/work/mh0066/m301046/data/mlclouds/idealized_profiles.nc"
 wvn_min_sw = 1 / 1e-5 / 100
 wvn_max_sw = 1e5
 n_wvn_sw = 500_000
@@ -41,7 +45,7 @@ surface_altitude= 0.0  # [m]
 surface_reflectivity_sw = rh.sw_reflectivity
 surface_reflectivity_lw = rh.lw_reflectivity
 
-LW_flux_simulator = fsm.FluxSimulator("beach"+ "_LW")
+LW_flux_simulator = fsm.FluxSimulator(exp_name + "_LW")
 species = [
             "H2O, H2O-SelfContCKDMT350, H2O-ForeignContCKDMT350",
             "O2-*-1e12-1e99,O2-CIAfunCKDMT100",
@@ -53,7 +57,7 @@ species = [
 LW_flux_simulator.ws.f_grid = f_grid_lw
 LW_flux_simulator.set_species(species)
 
-SW_flux_simulator = fsm.FluxSimulator("beach" + "_SW")
+SW_flux_simulator = fsm.FluxSimulator(exp_name + "_SW")
 SW_flux_simulator.ws.f_grid = f_grid_sw
 SW_flux_simulator.emission = 0
 SW_flux_simulator.gas_scattering = True
@@ -84,8 +88,9 @@ def get_atms_grd(ds):
 
 def create_ds(ds):
     shape_lw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_lw)//100)
-    shape_sw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_sw)//100 )
+    shape_sw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_sw)//100, 24)
     shape_integrated = (len(ds.sonde), len(ds.altitude))
+    shape_sw = (len(ds.sonde), len(ds.altitude), 24)
 
     fluxes = xr.Dataset(
         {
@@ -102,24 +107,25 @@ def create_ds(ds):
             "lw_heating_rate": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
 
             "sw_flux_up_spectral": (
-                            ("sonde", "altitude", "f_grid_sw"),
+                            ("sonde", "altitude", "f_grid_sw", "hour_of_day"),
                             np.full(shape_sw_flux, np.nan),
                         ),
             "sw_flux_down_spectral": (
-                ("sonde", "altitude", "f_grid_sw"),
+                ("sonde", "altitude", "f_grid_sw", "hour_of_day"),
                 np.full(shape_sw_flux, np.nan),
             ),
-            "sw_flux_up": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
-            "sw_flux_down": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
-            "sw_heating_rate": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
+            "sw_flux_up": (("sonde", "altitude", "hour_of_day"), np.full(shape_sw, np.nan)),
+            "sw_flux_down": (("sonde", "altitude", "hour_of_day"), np.full(shape_sw, np.nan)),
+            "sw_heating_rate": (("sonde", "altitude", "hour_of_day"), np.full(shape_sw, np.nan)),
         },
         coords={
-            "launch_lat": ("sonde", ds.launch_lat.values),
-            "launch_lon": ("sonde", ds.launch_lon.values),
-            "launch_time": ("sonde", ds.launch_time.values),
+            "launch_lat": mean_lat,
+            "launch_lon": mean_lon,
+            "launch_time": mean_day,
             "altitude": ("altitude", ds.altitude.values),
             "f_grid_lw": ("f_grid_lw", f_grid_lw[::100]),
             "f_grid_sw": ("f_grid_sw", f_grid_sw[::100]),
+            "hour_of_day": ("hour_of_day", np.arange(0, 24)),
         },
     )
     return xr.merge([fluxes, ds], compat="override")
@@ -127,7 +133,6 @@ def create_ds(ds):
 def init_store(store, ds):
     flxs = create_ds(ds)
     _, _ = get_atms_grd(ds)
-    print(flxs)
 
     flxs.to_zarr(
         store, 
@@ -167,8 +172,6 @@ def calc_fluxes(ds):
         lat = profile.launch_lat.values
         lon = profile.launch_lon.values
         surface_temp = profile.ta.sel(altitude=0, method="nearest").values
-        sun_pos = ph.get_arts_sun_pos(profile.launch_time.values)
-        SW_flux_simulator.set_sun(sun_pos)
         lw = LW_flux_simulator.flux_simulator_single_profile(
             atms_grd[i],
             surface_temp,
@@ -176,19 +179,31 @@ def calc_fluxes(ds):
             surface_reflectivity_lw,
             geographical_position=[lat, lon],
         )
-        sw = SW_flux_simulator.flux_simulator_single_profile(
-            atms_grd[i],
-            surface_temp,
-                surface_altitude,
-                surface_reflectivity_sw,
-                geographical_position=[lat, lon],
-            )
-        for name, data in [("lw", lw), ("sw", sw)]:
-            flxs[f"{name}_flux_up_spectral"].loc[dict(sonde=sname)] = data["spectral_flux_clearsky_up"].T[::100, :]
-            flxs[f"{name}_flux_down_spectral"].loc[dict(sonde=sname)] = data["spectral_flux_clearsky_down"].T[::100, :]
-            flxs[f"{name}_flux_up"].loc[dict(sonde=sname)] = data["flux_clearsky_up"]
-            flxs[f"{name}_flux_down"].loc[dict(sonde=sname)] = data["flux_clearsky_down"]
-            flxs[f"{name}_heating_rate"].loc[dict(sonde=sname)] = data["heating_rate_clearsky"]
+        flxs["lw_flux_up_spectral"].loc[dict(sonde=sname)] = lw["spectral_flux_clearsky_up"].T[:, ::100]
+        flxs["lw_flux_down_spectral"].loc[dict(sonde=sname)] = lw["spectral_flux_clearsky_down"].T[ :, ::100]
+        flxs["lw_flux_up"].loc[dict(sonde=sname)] = lw["flux_clearsky_up"]
+        flxs["lw_flux_down"].loc[dict(sonde=sname)] = lw["flux_clearsky_down"]
+        flxs["lw_heating_rate"].loc[dict(sonde=sname)] = lw["heating_rate_clearsky"]
+        for hour in flxs.hour_of_day.values:
+            swtime = np.datetime64(mean_day + np.timedelta64(hour, "h"), "ns")
+            sun_pos = ph.get_arts_sun_pos(swtime)
+            SW_flux_simulator.set_sun(sun_pos)
+
+            sw = SW_flux_simulator.flux_simulator_single_profile(
+                atms_grd[i],
+                surface_temp,
+                    surface_altitude,
+                    surface_reflectivity_sw,
+                    geographical_position=[lat, lon],
+                )
+            flxs["sw_flux_up_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_up"].T[:, ::100]
+            flxs["sw_flux_down_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_down"].T[ :, ::100]
+            flxs["sw_flux_up"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_up"]
+            flxs["sw_flux_down"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_down"]
+            flxs["sw_heating_rate"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["heating_rate_clearsky"]
+
+        
+        
         elapsed = time.time() - start_time
         remaining = elapsed / (i + 1) * (ds.sonde.size - i - 1)
         print(
@@ -207,6 +222,7 @@ def write_region(store, region):
 
     flxs.drop_vars(
         [
+            "hour_of_day",
             "launch_time",
             "launch_lat",
             "launch_lon",
