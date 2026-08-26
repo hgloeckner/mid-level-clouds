@@ -42,43 +42,58 @@ def make_rrtmg_atm(profile):
 
 
 def get_chunks(sizes, chunksize=393216):
+    sonde_chunksize = 5
     match tuple(sizes.keys()):
         case ("sonde", "altitude", "f_grid"):
-            sonde_chunksize = 10
             chunks = {
                 "sonde": sonde_chunksize,
                 "f_grid": chunksize // (10 * sonde_chunksize),
                 "altitude": 10,
             }
         case ("sonde", "altitude", "f_grid_sw"):
-                    sonde_chunksize = 10
-                    chunks = {
-                        "sonde": sonde_chunksize,
-                        "f_grid_sw": chunksize // (10 * sonde_chunksize),
-                        "altitude": 10,
-                    }
+            chunks = {
+                "sonde": sonde_chunksize,
+                "f_grid_sw": chunksize // (10 * sonde_chunksize),
+                "altitude": 10,
+            }
         case ("sonde", "altitude", "f_grid_lw"):
-                    sonde_chunksize = 10
+            chunks = {
+                "sonde": sonde_chunksize,
+                "f_grid_lw": chunksize // (10 * sonde_chunksize),
+                "altitude": 10,
+            }
+        case ("mu0","sonde", "altitude"):
+            chunks = {
+                "mu0": -1,
+                "sonde": sonde_chunksize,
+                "altitude": -1,
+                            }
+        case ("sonde", "altitude", "hour_of_day"):
                     chunks = {
+                        "hour_of_day": -1,
                         "sonde": sonde_chunksize,
-                        "f_grid_lw": chunksize // (10 * sonde_chunksize),
-                        "altitude": 10,
-                    }
+                        "altitude": -1,
+                                    }
+        case ("sonde", "altitude", "f_grid_sw", "hour_of_day"):
+                            sonde_chunksize = 5
+                            chunks = {
+                                "hour_of_day": -1,
+                                "sonde": sonde_chunksize,
+                                "f_grid_sw": chunksize // (10 * sonde_chunksize),
+                                "altitude": 10,
+                                            }
         case ("sonde", "level"):
-            sonde_chunksize = 10
             chunks = {
                 "sonde": sonde_chunksize,
                 "level": -1,
             }
         case ("sonde", "layer"):
-            sonde_chunksize = 10
             chunks = {
                 "sonde": sonde_chunksize,
                 "layer": -1,
             }
 
         case ("sonde", "altitude"):
-            sonde_chunksize = 10
             chunks = {
                 "sonde": sonde_chunksize,
                 "altitude": -1,
