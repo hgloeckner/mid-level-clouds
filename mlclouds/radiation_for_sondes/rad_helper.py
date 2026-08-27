@@ -42,7 +42,7 @@ def make_rrtmg_atm(profile):
 
 
 def get_chunks(sizes, chunksize=393216):
-    sonde_chunksize = 5
+    sonde_chunksize = 1
     match tuple(sizes.keys()):
         case ("sonde", "altitude", "f_grid"):
             chunks = {

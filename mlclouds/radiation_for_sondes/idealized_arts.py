@@ -2,9 +2,8 @@
 #SBATCH --account=mh0066
 #SBATCH --partition=compute
 #SBATCH --time=08:00:00
-#SBATCH --array=0-1
 
-import os  
+import os   #SBATCH --array=0-10
 import dask
 import numpy as np
 import xarray as xr
@@ -17,9 +16,9 @@ import argparse
 sys.path.append("/home/m/m301046/code/mid_level_clouds/mlclouds/")
 
 from radiation_for_sondes import rad_helper as rh
+from radiation_for_sondes import angles
 import myutils.physics_helper as ph
 import time
-
 
 exp_name = "beach"
 mean_day = np.datetime64("2024-09-01")
@@ -28,14 +27,14 @@ mean_lon = -40
 
 sondes_for_rad = "/work/mh0066/m301046/data/mlclouds/idealized_profiles.nc"
 wvn_min_sw = 1 / 1e-5 / 100
-wvn_max_sw = 1e5
+wvn_max_sw = 5e4
 n_wvn_sw = 500_000
 wvn_sw = np.logspace(np.log10(wvn_min_sw), np.log10(wvn_max_sw), n_wvn_sw)
 f_grid_sw = convert.kaycm2freq(wvn_sw)
 
 
 min_wvn = 10  # [cm^-1]
-max_wvn =  1 / 2e-6 / 100  # [cm^-1]
+max_wvn =  3250  # [cm^-1]
 n_freq_lw = 500_000
 wvn = np.linspace(min_wvn, max_wvn, n_freq_lw)
 
@@ -53,6 +52,7 @@ species = [
             "CO2, CO2-CKDMT252",
             "O3",
             "O3-XFIT",
+            "CH4"
         ]
 LW_flux_simulator.ws.f_grid = f_grid_lw
 LW_flux_simulator.set_species(species)
@@ -61,6 +61,7 @@ SW_flux_simulator = fsm.FluxSimulator(exp_name + "_SW")
 SW_flux_simulator.ws.f_grid = f_grid_sw
 SW_flux_simulator.emission = 0
 SW_flux_simulator.gas_scattering = True
+SW_flux_simulator.set_species(species)
 
 
 def get_atms_grd(ds):
@@ -81,7 +82,9 @@ def get_atms_grd(ds):
         z_field=profile["altitude"].values,
     )
         atms_grd.append(profile_grd)
+    print("Generating lookup tables for LW fluxes...", flush=True)
     LW_flux_simulator.get_lookuptableBatch(atms_grd)
+    #SW_flux_simulator.get_lookuptableBatch(atms_grd)
     return atms_grd, LW_flux_simulator
 
 
@@ -161,7 +164,7 @@ def init_store(store, ds):
 
 
 
-def calc_fluxes(ds):
+def calc_fluxes(ds, id):
     atms_grd, LW_flux_simulator = get_atms_grd(ds)
     flxs = create_ds(ds)
     start_time = time.time()
@@ -184,25 +187,30 @@ def calc_fluxes(ds):
         flxs["lw_flux_up"].loc[dict(sonde=sname)] = lw["flux_clearsky_up"]
         flxs["lw_flux_down"].loc[dict(sonde=sname)] = lw["flux_clearsky_down"]
         flxs["lw_heating_rate"].loc[dict(sonde=sname)] = lw["heating_rate_clearsky"]
+        
+        print("lw done for sonde", sname, flush=True)
         for hour in flxs.hour_of_day.values:
             swtime = np.datetime64(mean_day + np.timedelta64(hour, "h"), "ns")
-            sun_pos = ph.get_arts_sun_pos(swtime)
-            SW_flux_simulator.set_sun(sun_pos)
+            mu0 = angles.cos_zenith_angle(swtime, mean_lat, mean_lon)
+            if mu0 > 0:
+                sun_pos = ph.get_arts_sun_pos(swtime)
+                SW_flux_simulator.set_sun(sun_pos)
 
-            sw = SW_flux_simulator.flux_simulator_single_profile(
-                atms_grd[i],
-                surface_temp,
-                    surface_altitude,
-                    surface_reflectivity_sw,
-                    geographical_position=[lat, lon],
-                )
-            flxs["sw_flux_up_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_up"].T[:, ::100]
-            flxs["sw_flux_down_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_down"].T[ :, ::100]
-            flxs["sw_flux_up"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_up"]
-            flxs["sw_flux_down"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_down"]
-            flxs["sw_heating_rate"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["heating_rate_clearsky"]
-
+                sw = SW_flux_simulator.flux_simulator_single_profile(
+                    atms_grd[i],
+                    surface_temp,
+                        surface_altitude,
+                        surface_reflectivity_sw,
+                        geographical_position=[lat, lon],
+                    )
+                flxs["sw_flux_up_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_up"].T[:, ::100]
+                flxs["sw_flux_down_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_down"].T[ :, ::100]
+                flxs["sw_flux_up"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_up"]
+                flxs["sw_flux_down"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_down"]
+                flxs["sw_heating_rate"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["heating_rate_clearsky"]
+                
         
+        print("sw done for sonde", sname, flush=True)
         
         elapsed = time.time() - start_time
         remaining = elapsed / (i + 1) * (ds.sonde.size - i - 1)
@@ -214,11 +222,11 @@ def calc_fluxes(ds):
 
        
 
-def write_region(store, region):
+def write_region(store, region, id=None):
     dask.config.set(num_workers=32, scheduler="threads")
 
     ds = xr.open_dataset(sondes_for_rad).dropna(dim="sonde", how="any", subset=["ta", "q", "p", "o3", "altitude"]).isel(region)
-    flxs = calc_fluxes(ds)
+    flxs = calc_fluxes(ds, id)
 
     flxs.drop_vars(
         [
@@ -265,7 +273,7 @@ def _main():
         }
         print(batch_id, region, flush=True)
         print(args.store)
-        write_region(args.store, region)
+        write_region(args.store, region, batch_id)
 
 
 if __name__ == "__main__":
