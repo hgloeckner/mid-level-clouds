@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-#SBATCH --account=mh0066
-#SBATCH --partition=compute
-#SBATCH --time=08:00:00
-
-import os   #SBATCH --array=0-10
+# SBATCH --account=mh0066
+# SBATCH --partition=compute
+# SBATCH --time=08:00:00
+# SBATCH --array=0-10
+import os
 import dask
 import numpy as np
 import xarray as xr
@@ -107,19 +107,30 @@ def create_ds(ds):
             ),
             "lw_flux_up": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
             "lw_flux_down": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
-            "lw_heating_rate": (("sonde", "altitude"), np.full(shape_integrated, np.nan)),
-
+            "lw_heating_rate": (
+                ("sonde", "altitude"),
+                np.full(shape_integrated, np.nan),
+            ),
             "sw_flux_up_spectral": (
-                            ("sonde", "altitude", "f_grid_sw", "hour_of_day"),
-                            np.full(shape_sw_flux, np.nan),
-                        ),
+                ("sonde", "altitude", "f_grid_sw", "hour_of_day"),
+                np.full(shape_sw_flux, np.nan),
+            ),
             "sw_flux_down_spectral": (
                 ("sonde", "altitude", "f_grid_sw", "hour_of_day"),
                 np.full(shape_sw_flux, np.nan),
             ),
-            "sw_flux_up": (("sonde", "altitude", "hour_of_day"), np.full(shape_sw, np.nan)),
-            "sw_flux_down": (("sonde", "altitude", "hour_of_day"), np.full(shape_sw, np.nan)),
-            "sw_heating_rate": (("sonde", "altitude", "hour_of_day"), np.full(shape_sw, np.nan)),
+            "sw_flux_up": (
+                ("sonde", "altitude", "hour_of_day"),
+                np.full(shape_sw, np.nan),
+            ),
+            "sw_flux_down": (
+                ("sonde", "altitude", "hour_of_day"),
+                np.full(shape_sw, np.nan),
+            ),
+            "sw_heating_rate": (
+                ("sonde", "altitude", "hour_of_day"),
+                np.full(shape_sw, np.nan),
+            ),
         },
         coords={
             "launch_lat": mean_lat,
@@ -133,35 +144,30 @@ def create_ds(ds):
     )
     return xr.merge([fluxes, ds], compat="override")
 
+
 def init_store(store, ds):
     flxs = create_ds(ds)
     _, _ = get_atms_grd(ds)
 
     flxs.to_zarr(
-        store, 
-        encoding=rh.get_encoding(flxs),
-        mode="w",
-        compute=False,
-        zarr_format=2
+        store, encoding=rh.get_encoding(flxs), mode="w", compute=False, zarr_format=2
     )
     flxs[
-            [
-                "launch_time",
-                "launch_lat",
-                "launch_lon",
-                "altitude",
-             #   "latitude",
-             #   "longitude",
-                "f_grid_lw",
-                "f_grid_sw",
-                "o3",
-                
-            ]
-        ].to_zarr(
-            store,
-            mode="r+",
-        )
-
+        [
+            "launch_time",
+            "launch_lat",
+            "launch_lon",
+            "altitude",
+            #   "latitude",
+            #   "longitude",
+            "f_grid_lw",
+            "f_grid_sw",
+            "o3",
+        ]
+    ].to_zarr(
+        store,
+        mode="r+",
+    )
 
 
 def calc_fluxes(ds, id):
@@ -182,12 +188,16 @@ def calc_fluxes(ds, id):
             surface_reflectivity_lw,
             geographical_position=[lat, lon],
         )
-        flxs["lw_flux_up_spectral"].loc[dict(sonde=sname)] = lw["spectral_flux_clearsky_up"].T[:, ::100]
-        flxs["lw_flux_down_spectral"].loc[dict(sonde=sname)] = lw["spectral_flux_clearsky_down"].T[ :, ::100]
+        flxs["lw_flux_up_spectral"].loc[dict(sonde=sname)] = lw[
+            "spectral_flux_clearsky_up"
+        ].T[:, ::100]
+        flxs["lw_flux_down_spectral"].loc[dict(sonde=sname)] = lw[
+            "spectral_flux_clearsky_down"
+        ].T[:, ::100]
         flxs["lw_flux_up"].loc[dict(sonde=sname)] = lw["flux_clearsky_up"]
         flxs["lw_flux_down"].loc[dict(sonde=sname)] = lw["flux_clearsky_down"]
         flxs["lw_heating_rate"].loc[dict(sonde=sname)] = lw["heating_rate_clearsky"]
-        
+
         print("lw done for sonde", sname, flush=True)
         for hour in flxs.hour_of_day.values:
             swtime = np.datetime64(mean_day + np.timedelta64(hour, "h"), "ns")
@@ -199,33 +209,45 @@ def calc_fluxes(ds, id):
                 sw = SW_flux_simulator.flux_simulator_single_profile(
                     atms_grd[i],
                     surface_temp,
-                        surface_altitude,
-                        surface_reflectivity_sw,
-                        geographical_position=[lat, lon],
-                    )
-                flxs["sw_flux_up_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_up"].T[:, ::100]
-                flxs["sw_flux_down_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["spectral_flux_clearsky_down"].T[ :, ::100]
-                flxs["sw_flux_up"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_up"]
-                flxs["sw_flux_down"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["flux_clearsky_down"]
-                flxs["sw_heating_rate"].loc[dict(sonde=sname, hour_of_day=hour)] = sw["heating_rate_clearsky"]
-                
-        
+                    surface_altitude,
+                    surface_reflectivity_sw,
+                    geographical_position=[lat, lon],
+                )
+                flxs["sw_flux_up_spectral"].loc[dict(sonde=sname, hour_of_day=hour)] = (
+                    sw["spectral_flux_clearsky_up"].T[:, ::100]
+                )
+                flxs["sw_flux_down_spectral"].loc[
+                    dict(sonde=sname, hour_of_day=hour)
+                ] = sw["spectral_flux_clearsky_down"].T[:, ::100]
+                flxs["sw_flux_up"].loc[dict(sonde=sname, hour_of_day=hour)] = sw[
+                    "flux_clearsky_up"
+                ]
+                flxs["sw_flux_down"].loc[dict(sonde=sname, hour_of_day=hour)] = sw[
+                    "flux_clearsky_down"
+                ]
+                flxs["sw_heating_rate"].loc[dict(sonde=sname, hour_of_day=hour)] = sw[
+                    "heating_rate_clearsky"
+                ]
+
         print("sw done for sonde", sname, flush=True)
-        
+
         elapsed = time.time() - start_time
         remaining = elapsed / (i + 1) * (ds.sonde.size - i - 1)
         print(
-                    f"{i + 1}/{ds.sonde.size} complete | ETA: {remaining:.1f}s (~{remaining / 60:.1f} min)",
-                    flush=True,
-                )
+            f"{i + 1}/{ds.sonde.size} complete | ETA: {remaining:.1f}s (~{remaining / 60:.1f} min)",
+            flush=True,
+        )
     return flxs
 
-       
 
 def write_region(store, region, id=None):
     dask.config.set(num_workers=32, scheduler="threads")
 
-    ds = xr.open_dataset(sondes_for_rad).dropna(dim="sonde", how="any", subset=["ta", "q", "p", "o3", "altitude"]).isel(region)
+    ds = (
+        xr.open_dataset(sondes_for_rad)
+        .dropna(dim="sonde", how="any", subset=["ta", "q", "p", "o3", "altitude"])
+        .isel(region)
+    )
     flxs = calc_fluxes(ds, id)
 
     flxs.drop_vars(
@@ -243,11 +265,11 @@ def write_region(store, region, id=None):
             "o3",
             "T",
             "P0",
-            "theta", 
-            "theta_rho", 
-            "rh" 
-        ], 
-        errors="ignore"
+            "theta",
+            "theta_rho",
+            "rh",
+        ],
+        errors="ignore",
     ).to_zarr(
         store,
         mode="r+",
@@ -264,7 +286,9 @@ def _main():
     args = parser.parse_args()
 
     if args.init:
-        ds = xr.open_dataset(sondes_for_rad).dropna(dim="sonde", how="any", subset=["ta", "q", "p", "o3", "altitude"])
+        ds = xr.open_dataset(sondes_for_rad).dropna(
+            dim="sonde", how="any", subset=["ta", "q", "p", "o3", "altitude"]
+        )
         init_store(args.store, ds)
     else:
         batch_id = int(os.environ.get("SLURM_ARRAY_TASK_ID", 0))
