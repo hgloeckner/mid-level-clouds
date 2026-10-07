@@ -20,17 +20,14 @@ import radiation_for_sondes.rrtmg.rad_helper as rad
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
-levante = False
+levante = True
 
 if levante:
-    from pyrte_rrtmgp.rrtmgp import GasOptics
-    from pyrte_rrtmgp.rrtmgp_data_files import GasOpticsFiles
-
     file_path = "/scratch/m/m301046/"
     cth_path = "/work/mh0066/m301046/ml_clouds/sondes_for_radiation.nc"
 
 else:
-    file_path = "/Users/helene/Documents/code/mid_level_clouds/plots/"
+    file_path = "/Users/helene/Documents/data/mlclouds/sondes_for_radiation/"
     cth_path = file_path + "sondes_for_radiation.nc"
 
 
