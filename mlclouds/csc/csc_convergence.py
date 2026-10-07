@@ -16,7 +16,7 @@ import radiation_for_sondes.rrtmg.rad_helper as rad
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
-levante = False
+levante = True
 
 if levante:
     filepath = "/scratch/m/m301046/"
