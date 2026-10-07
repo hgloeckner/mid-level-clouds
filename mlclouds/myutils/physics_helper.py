@@ -142,7 +142,6 @@ def get_wdir_and_wspd(u, v):
     return wdir, wspd
 
 
-
 P = np.arange(100900.0, 4000.0, -500)
 Rv = mtc.Rv
 Rd = mtc.Rd
@@ -252,8 +251,9 @@ def make_sounding_from_adiabat(
 
     return TPq.set_coords("altitude").swap_dims({"levels": "altitude"})
 
+
 def get_arts_sun_pos(time):
-    
+
     time = astropy.time.Time(time, scale="utc")
 
     sun = astropy.coordinates.get_sun(time)  # GCRS RA/Dec/distance
@@ -264,8 +264,6 @@ def get_arts_sun_pos(time):
     subsolar_lat = sun.dec.deg
 
     return [distance_m, subsolar_lat, subsolar_lon]
-
-
 
 
 def uniform_humidity(ds, zlcl, ztoa, rh, es=mtf.es_default):

@@ -2,7 +2,7 @@ import xarray as xr
 import numpy as np
 import hashlib
 import intake
-from zarr.codecs import BloscCodec
+# from zarr.codecs import BloscCodec
 
 
 def hash_xr_var(da):
