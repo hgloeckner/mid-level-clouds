@@ -24,9 +24,10 @@ regions = {
 
 
 # %%
-
-wv, no_wv = od.open_wales(masked=False, local=True)
-
+store = "https://swift.dkrz.de/v1/dkrz_41caca03ec414c2f95f52b23b775134f/wales"
+no_wv = xr.open_dataset(store + "/wales_no_wv.zarr", engine="zarr", chunks={})
+wv = xr.open_dataset(store + "/wales_wv.zarr", engine="zarr", chunks={})
+# %%
 cid = "ipns://latest.orcestra-campaign.org"  # open_datasets.get_cid()
 dropsondes = xr.open_dataset(
     "ipfs://bafybeiczbv7mycr2jois6t4dq3zwiltycomwo5xxvjqcjz2ot3newzar6q",
@@ -41,6 +42,7 @@ rdata = (
     .sel(time=slice(np.datetime64("2024-08-10"), np.datetime64("2024-09-29")))
     .sortby("altitude")
 )
+# %%
 no_wv = no_wv.sel(time=slice(np.datetime64("2024-08-10"), np.datetime64("2024-09-29")))
 no_wv = xr.where(no_wv.bsrgl_flags == 8, 100, no_wv)
 no_wv = no_wv.where((no_wv.bsrgl_flags == 0) | (no_wv.bsrgl_flags == 8)).sortby(
