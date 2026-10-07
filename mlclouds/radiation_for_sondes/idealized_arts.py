@@ -28,40 +28,77 @@ mean_lon = -40
 sondes_for_rad = "/work/mh0066/m301046/data/mlclouds/idealized_profiles.nc"
 wvn_min_sw = 1 / 1e-5 / 100
 wvn_max_sw = 5e4
-n_wvn_sw = 500_000
+n_wvn_sw = 100_000
 wvn_sw = np.logspace(np.log10(wvn_min_sw), np.log10(wvn_max_sw), n_wvn_sw)
 f_grid_sw = convert.kaycm2freq(wvn_sw)
 
 
 min_wvn = 10  # [cm^-1]
-max_wvn =  3250  # [cm^-1]
-n_freq_lw = 500_000
+max_wvn = 3250  # [cm^-1]
+n_freq_lw = 100_000
 wvn = np.linspace(min_wvn, max_wvn, n_freq_lw)
 
 f_grid_lw = convert.kaycm2freq(wvn)
 
-surface_altitude= 0.0  # [m]
+surface_altitude = 0.0  # [m]
 surface_reflectivity_sw = rh.sw_reflectivity
 surface_reflectivity_lw = rh.lw_reflectivity
 
 LW_flux_simulator = fsm.FluxSimulator(exp_name + "_LW")
-species = [
-            "H2O, H2O-SelfContCKDMT350, H2O-ForeignContCKDMT350",
-            "O2-*-1e12-1e99,O2-CIAfunCKDMT100",
-            "N2, N2-CIAfunCKDMT252, N2-CIArotCKDMT252",
-            "CO2, CO2-CKDMT252",
-            "O3",
-            "O3-XFIT",
-            "CH4"
-        ]
+LW_flux_simulator.set_paths(
+    lut_path="/work/mh0066/m301046/data/mlclouds/lookup_tables/LW"
+)
+LW_flux_simulator.LUT_wide_h2o_vmr_default_parameters = [
+    1000.0,
+    1e-08,
+    100000.0,
+    0.0445,
+]
+
+species_lw = [
+    "H2O, H2O-SelfContCKDMT350, H2O-ForeignContCKDMT350",
+    "O2-*-1e12-1e99,O2-CIAfunCKDMT100",
+    "N2, N2-CIAfunCKDMT252, N2-CIArotCKDMT252",
+    "CO2, CO2-CKDMT252",
+    "O3",
+    "O3-XFIT",
+    "CH4",
+]
 LW_flux_simulator.ws.f_grid = f_grid_lw
-LW_flux_simulator.set_species(species)
+LW_flux_simulator.set_species(species_lw)
+LW_flux_simulator.get_lookuptableWide(
+    t_min=170.0,
+    recalc=False,
+)
+
 
 SW_flux_simulator = fsm.FluxSimulator(exp_name + "_SW")
+SW_flux_simulator.set_paths(
+    lut_path="/work/mh0066/m301046/data/mlclouds/lookup_tables/SW"
+)
+SW_flux_simulator.LUT_wide_h2o_vmr_default_parameters = [
+    1000.0,
+    1e-08,
+    100000.0,
+    0.05,
+]
+species_sw = [
+    "H2O, H2O-SelfContCKDMT350, H2O-ForeignContCKDMT350",
+    "O2-*-1e12-1e99,O2-CIAfunCKDMT100",
+    "N2, N2-CIAfunCKDMT252, N2-CIArotCKDMT252",
+    "CO2, CO2-CKDMT252",
+    "O3",
+    "O3-XFIT",
+]
+
 SW_flux_simulator.ws.f_grid = f_grid_sw
 SW_flux_simulator.emission = 0
 SW_flux_simulator.gas_scattering = True
-SW_flux_simulator.set_species(species)
+SW_flux_simulator.set_species(species_sw)
+SW_flux_simulator.get_lookuptableWide(
+    t_min=170.0,
+    recalc=False,
+)
 
 
 def get_atms_grd(ds):
@@ -69,29 +106,28 @@ def get_atms_grd(ds):
     for i in range(ds.sonde.size):
         profile = ds.isel(sonde=i)
         profile_grd = fsm.generate_gridded_field_from_profiles(
-        profile["p"].values,
-        profile["ta"].values,
-        gases={
-            "H2O": ph.specific_humidity2vmr(profile["q"]),
-            "CO2": np.repeat(rh.gases["co2"], profile["q"].shape),
-            "O3": profile["o3"],
-            "N2": np.repeat(rh.gases["n2"], profile["q"].shape),
-            "O2": np.repeat(rh.gases["o2"], profile["q"].shape),
-            "CH4": np.repeat(rh.gases["ch4"], profile["q"].shape),
-        },
-        z_field=profile["altitude"].values,
-    )
+            profile["p"].values,
+            profile["ta"].values,
+            gases={
+                "H2O": ph.specific_humidity2vmr(profile["q"]),
+                "CO2": np.repeat(rh.gases["co2"], profile["q"].shape),
+                "O3": profile["o3"],
+                "N2": np.repeat(rh.gases["n2"], profile["q"].shape),
+                "O2": np.repeat(rh.gases["o2"], profile["q"].shape),
+                "CH4": np.repeat(rh.gases["ch4"], profile["q"].shape),
+            },
+            z_field=profile["altitude"].values,
+        )
         atms_grd.append(profile_grd)
     print("Generating lookup tables for LW fluxes...", flush=True)
-    LW_flux_simulator.get_lookuptableBatch(atms_grd)
-    #SW_flux_simulator.get_lookuptableBatch(atms_grd)
+    # LW_flux_simulator.get_lookuptableBatch(atms_grd)
+    # SW_flux_simulator.get_lookuptableBatch(atms_grd)
     return atms_grd, LW_flux_simulator
 
 
-
 def create_ds(ds):
-    shape_lw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_lw)//100)
-    shape_sw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_sw)//100, 24)
+    shape_lw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_lw) // 100)
+    shape_sw_flux = (len(ds.sonde), len(ds.altitude), len(f_grid_sw) // 100, 24)
     shape_integrated = (len(ds.sonde), len(ds.altitude))
     shape_sw = (len(ds.sonde), len(ds.altitude), 24)
 
