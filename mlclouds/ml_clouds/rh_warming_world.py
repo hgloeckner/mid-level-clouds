@@ -6,8 +6,12 @@ import xarray as xr
 import moist_thermodynamics.functions as mtf
 import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.saturation_vapor_pressures as svp
-import myutils.moist_adiabats as ma
+import sys
+
+sys.path.append(".")
+sys.path.append("..")
 import radiation_for_sondes.rrtmg.rad_helper as rad
+import myutils.moist_adiabats as ma
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
