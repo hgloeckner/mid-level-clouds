@@ -12,23 +12,22 @@ from xhistogram.xarray import histogram
 
 #%%
 
+datapath = "/Users/helene/Documents/data/"
+
+
 beach = (xr.open_dataset("ipfs://bafybeiczbv7mycr2jois6t4dq3zwiltycomwo5xxvjqcjz2ot3newzar6q", engine="zarr")
          .pipe(datautils.interpolate_gaps).pipe(datautils.extrapolate_sfc)
          
          )
 
 expanded_beach = xr.open_dataset(
-    "/scratch/m/m301046/radiation_sondes.nc"
+    datapath + "mlclouds/radiation_sondes.nc"
 )
 
 ct = xr.open_dataset(
-    "/work/mh0066/m301046/data/wales-ct.nc"
+    datapath + "wales/wales-ct.nc"
 )
 #%%
-
-beach_ta = histogram(
-
-)
 
 
 lowno_clouds = beach.where(
