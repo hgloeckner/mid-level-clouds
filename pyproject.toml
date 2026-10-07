@@ -29,6 +29,7 @@ dependencies = [
     "pytest",
     "requests",
     "ruff",
+    "s3fs",
     "scipy",
     "seaborn",
     "setuptools>=80.9.0",
