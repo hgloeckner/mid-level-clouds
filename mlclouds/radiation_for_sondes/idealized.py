@@ -13,7 +13,7 @@ from xhistogram.xarray import histogram
 # %%
 
 datapath = "/Users/helene/Documents/data/"
-
+datapath = "/work/mh0066/m301046/data/"
 
 beach = (
     xr.open_dataset(
@@ -142,13 +142,25 @@ qkwargs = {
 
 
 def get_qshapes(dst):
-    es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
-
     qshapes = []
     rhshapes = []
     for shape in qkwargs.keys():
         qc, rhc = ph.cshape_humidity(dst, **qkwargs[shape])
+        qc = xr.concat(
+            [
+                qc.sel(altitude=slice(None, 14000)),
+                expanded_beach.mean("sonde").sel(altitude=slice(15000, None)).q,
+            ],
+            dim="altitude",
+        ).reset_coords(["longitude"], drop=True)
         qe, rhe = ph.eshape_humidity(dst, **qkwargs[shape])
+        qe = xr.concat(
+            [
+                qe.sel(altitude=slice(None, 14000)),
+                expanded_beach.mean("sonde").sel(altitude=slice(15000, None)).q,
+            ],
+            dim="altitude",
+        ).reset_coords(["longitude"], drop=True)
         qshapes.append(qc)
         rhshapes.append(rhc)
         qshapes.append(qe)
@@ -178,10 +190,27 @@ def get_qreal(dst):
             .assign(altitude=dst.swap_dims({"altitude": "ta"}).altitude)
             .swap_dims({"ta": "altitude"})
         )
-        print(rhreal)
+
+        qreal = mtf.relative_humidity_to_specific_humidity(
+            rhreal.rh, dst.p, dst.ta, es=svp.liq_hardy
+        )
+        print(qreal)
+        print(
+            expanded_beach.mean("sonde")
+            .reset_coords()
+            .sel(altitude=slice(15000, None))
+            .q
+        )
         qreals.append(
-            mtf.relative_humidity_to_specific_humidity(
-                rhreal.rh, dst.p, dst.ta, es=svp.liq_hardy
+            xr.concat(
+                [
+                    qreal.sel(altitude=slice(None, 14000)).reset_coords(drop=True),
+                    expanded_beach.mean("sonde")
+                    .reset_coords()
+                    .sel(altitude=slice(15000, None))
+                    .q,
+                ],
+                dim="altitude",
             )
         )
         coords.append(
@@ -270,17 +299,6 @@ ax.invert_yaxis()
 
 # %%
 
-adiabat = adiabat.assign(
-    q=xr.where(
-        adiabat.altitude >= 25000,
-        4e-8,
-        xr.where(adiabat.altitude < 20000, adiabat.q, np.nan),
-    )
-    .chunk({"altitude": -1})
-    .interpolate_na(dim="altitude")
-    .T
-)
-
 
 # %%
 # xr.broadcast(adiabat.rename({"shape":"sonde"}))[0].transpose("sonde", "altitude").to_netcdf(datapath + "mlclouds/realt_profiles.nc")
@@ -308,7 +326,7 @@ beach_on_grid = (
 
 realt = xr.concat(
     [
-        beach_on_grid.sel(altitude=slice(None, 14500)).reset_coords(["p"]),
+        beach_on_grid.sel(altitude=slice(None, 14000)).reset_coords(["p"]),
         expanded_beach.mean("sonde").sel(altitude=slice(15000, None)),
     ],
     dim="altitude",
@@ -362,14 +380,23 @@ for key, ds in humdata.items():
         .interpolate_na(dim="altitude")
         .T
     )
+    humdata[key] = ds.assign(
+        q=xr.where(
+            ds.altitude < 500, ds.sel(altitude=500, method="nearest").q.values, ds.q
+        )
+    )
     xr.broadcast(humdata[key].rename({"shape": "sonde"}))[0].transpose(
         "sonde", "altitude"
     ).to_netcdf(datapath + f"mlclouds/idealized_{key}_profiles.nc")
 
 
 # %%
-# xr.broadcast(adiabat.rename({"shape":"sonde"}))[0].transpose("sonde", "altitude").to_netcdf(datapath + "mlclouds/realt_profiles.nc")
-# idealized_profiles.nc for moist adiabatic T
+for ds in humdata.values():
+    # ds = ds.swap_dims({"altitude":"ta"})
+    ds.q.sel(shape="realall").plot(y="altitude")
 
-
+# expanded_beach.mean("sonde").q.plot.line(y="altitude", color="k", ls="--")
+beach.q.mean("sonde").plot.line(y="altitude", color="k", ls=":")
+# plt.xlim(0.0, 0.00002)
+plt.ylim(0, 15000)
 # %%
