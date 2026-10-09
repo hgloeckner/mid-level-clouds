@@ -7,7 +7,6 @@ from moist_thermodynamics.saturation_vapor_pressures import es
 import xarray as xr
 from scipy.interpolate import PchipInterpolator
 
-
 def calc_Tv(T, mr):
     """
     Calculate the virtual temperature (Tv) from temperature (T) and mixing ratio (mr).
@@ -273,34 +272,20 @@ def uniform_humidity(ds, zlcl, ztoa, rh, es=mtf.es_default):
 
 
 def cshape_humidity(
-    ds,
-    talcl,
-    rhmid,
-    rhlcl,
-    rhtoa,
-    rhtop,
-    Tmin=260,
-    Ttop=220,
-    es=mtf.es_default,
-    **kwargs,
+    ds, talcl, rhmid, rhlcl, rhtoa,rhtop, Tmin=260,Ttop=220, es=mtf.es_default, **kwargs
 ):
-    # talzl = ds.ta[np.abs(ds.altitude - zlcl).argmin()].values
-    # print(talzl)
+    #talzl = ds.ta[np.abs(ds.altitude - zlcl).argmin()].values
+    #print(talzl)
     if Ttop is None:
         g = PchipInterpolator(
-            [ds.ta.min().values, Tmin, talcl],
-            [np.sqrt(rhtop - rhmid), 0.0, -np.sqrt(rhlcl - rhmid)],
-            extrapolate=False,
-        )
+                [ds.ta.min().values, Tmin,talcl],
+                [np.sqrt(rhtop - rhmid), 0.0, -np.sqrt(rhlcl - rhmid)],
+                extrapolate=False,
+            )
     else:
         g = PchipInterpolator(
-            [ds.ta.min().values, Ttop, Tmin, talcl],
-            [
-                np.sqrt(rhtop - rhmid),
-                np.sqrt(rhtoa - rhmid),
-                0.0,
-                -np.sqrt(rhlcl - rhmid),
-            ],
+            [ds.ta.min().values,Ttop, Tmin,talcl],
+            [np.sqrt(rhtop - rhmid),np.sqrt(rhtoa - rhmid), 0.0, -np.sqrt(rhlcl - rhmid)],
             extrapolate=False,
         )
     rh = xr.DataArray(rhmid + g(ds.ta.values) ** 2, coords={"altitude": ds.altitude})
@@ -308,47 +293,26 @@ def cshape_humidity(
     qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.p, ds.ta, es=es)
     return qrh.ffill(dim="altitude").bfill(dim="altitude"), rh
 
+def eshape_humidity(
+    ds,  highlim, lowlim,rhpeak,tapeak, es,  **kwargs
+):
+    #talzl = ds.ta[np.abs(ds.altitude - zlcl).argmin()].values
+    #print(talzl)
 
-def eshape_humidity(ds, highlim, lowlim, rhpeak, tapeak, es, **kwargs):
-    # talzl = ds.ta[np.abs(ds.altitude - zlcl).argmin()].values
-    # print(talzl)
-
-    _, rh = cshape_humidity(ds, es=es, **kwargs)
+    _, rh = cshape_humidity(
+        ds,es=es, **kwargs
+    )
     rhc = rh[np.abs(ds.ta - tapeak).argmin("altitude")].values
     rhlow = rh[np.abs(ds.ta - lowlim).argmin("altitude")].values
     rhhigh = rh[np.abs(ds.ta - highlim).argmin("altitude")].values
     g = PchipInterpolator(
-        [highlim, tapeak, lowlim], [-1.0, 0.0, 1.0], extrapolate=False
+        [ highlim, tapeak,lowlim], [-1.0, 0.0, 1.0], extrapolate=False
     )
 
+    
     peak = (ds.ta <= lowlim) & (ds.ta >= highlim)
     rh[peak] = rh[peak] + (rhpeak - rhc) * (1 - g(ds.ta[peak].values) ** 2) ** 2
     qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.p, ds.ta, es=es)
     return qrh.ffill(dim="altitude").bfill(dim="altitude"), rh
 
-    (ds,)
-    (zlcl,)
-    (rhmid,)
-    (rhlcl,)
-    (rhtoa,)
-    lowlim = (280,)
-    highlim = (265,)
-    factor = (0.5,)
-    Tmin = (260,)
-    es = (mtf.es_default,)
 
-    rh = xr.DataArray(
-        np.full_like(ds.ta.values, np.nan),
-        dims=("altitude",),
-        coords={"altitude": ds.altitude},
-    )
-
-    rh[ds.ta.argmin()] = rhtoa
-    rh[np.abs(ds.ta - Tmin).argmin()] = rhmid
-    rh[np.abs(ds.altitude - zlcl).argmin()] = rhlcl
-    rh = rh.interpolate_na("altitude", method="quadratic")
-    rh = rh.where((ds.ta <= highlim) | (ds.ta >= lowlim))
-    rh[np.abs(ds.ta - 273.15).argmin()] = (rhmid + rhlcl) * factor
-    rh = rh.interpolate_na("altitude", method="quadratic")
-    qrh = mtf.relative_humidity_to_specific_humidity(rh, ds.p, ds.ta, es=es)
-    return qrh.ffill(dim="altitude").bfill(dim="altitude"), rh
