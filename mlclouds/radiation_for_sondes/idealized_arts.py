@@ -3,6 +3,7 @@
 # SBATCH --partition=compute
 # SBATCH --time=08:00:00
 # SBATCH --array=0-10
+
 import os
 import dask
 import numpy as np
@@ -20,12 +21,15 @@ from radiation_for_sondes import angles
 import myutils.physics_helper as ph
 import time
 
+
+temp_type = "adiabat"
 exp_name = "beach"
 mean_day = np.datetime64("2024-09-01")
 mean_lat = 9
 mean_lon = -40
 
-sondes_for_rad = "/work/mh0066/m301046/data/mlclouds/idealized_profiles.nc"
+datapath = "/work/mh0066/m301046/data/"
+sondes_for_rad = datapath + f"mlclouds/idealized_{temp_type}_profiles.nc"  # real
 wvn_min_sw = 1 / 1e-5 / 100
 wvn_max_sw = 5e4
 n_wvn_sw = 100_000
@@ -214,8 +218,8 @@ def calc_fluxes(ds, id):
     for i in range(ds.sonde.size):
         sname = ds.sonde.isel(sonde=i).values
         profile = ds.isel(sonde=i)
-        lat = profile.launch_lat.values
-        lon = profile.launch_lon.values
+        lat = mean_lat
+        lon = mean_lon
         surface_temp = profile.ta.sel(altitude=0, method="nearest").values
         lw = LW_flux_simulator.flux_simulator_single_profile(
             atms_grd[i],
