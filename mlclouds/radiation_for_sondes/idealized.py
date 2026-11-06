@@ -385,10 +385,11 @@ for key, ds in humdata.items():
             ds.altitude < 500, ds.sel(altitude=500, method="nearest").q.values, ds.q
         )
     )
+    ''' '''
     xr.broadcast(humdata[key].rename({"shape": "sonde"}))[0].transpose(
         "sonde", "altitude"
     ).to_netcdf(datapath + f"mlclouds/idealized_{key}_profiles.nc")
-
+   
 
 # %%
 for ds in humdata.values():
