@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-#SBATCH --account=mh0066
-#SBATCH --partition=compute
-#SBATCH --time=08:00:00
-#SBATCH --array=0-10
+# SBATCH --account=mh0066
+# SBATCH --partition=compute
+# SBATCH --time=08:00:00
+# SBATCH --array=0-10
 
 import os
 import dask
