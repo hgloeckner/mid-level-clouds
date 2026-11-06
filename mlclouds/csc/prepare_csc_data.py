@@ -1,6 +1,4 @@
 # %%
-from turtle import title
-
 from matplotlib.lines import Line2D
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,12 +13,12 @@ import moist_thermodynamics.constants as mtc
 import moist_thermodynamics.saturation_vapor_pressures as svp
 
 import myutils.moist_adiabats as ma
-from radiation_for_sondes.rrtmg import angles
-import radiation_for_sondes.rrtmg.rad_helper as rad
+from radiation_for_sondes import angles
+import radiation_for_sondes.rad_helper as rad
 
 es = mtf.make_es_mxd(svp.liq_wagner_pruss, svp.ice_wagner_etal)
 
-levante = True
+levante = False
 
 if levante:
     file_path = "/scratch/m/m301046/"

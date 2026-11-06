@@ -12,20 +12,18 @@ from myutils import physics_helper as physics
 import myutils.data_helper as dh
 from orcestra import get_flight_segments
 
-# %%
-cid = "ipns://latest.orcestra-campaign.org"  # open_datasets.get_cid()
+# %%  # open_datasets.get_cid()
 dropsondes = (
     xr.open_dataset(
-        f"{cid}/products/HALO/dropsondes/Level_3/PERCUSION_Level_3.zarr",
+        "ipfs://bafybeiczbv7mycr2jois6t4dq3zwiltycomwo5xxvjqcjz2ot3newzar6q",
         engine="zarr",
     )
     .pipe(dh.interpolate_gaps)
     .pipe(dh.extrapolate_sfc)
 )
 
-lev4 = xr.open_dataset(
-    f"{cid}/products/HALO/dropsondes/Level_4/PERCUSION_Level_4.zarr",
-    engine="zarr",
+lev4 = ds = xr.open_dataset(
+    "ipfs://bafybeibgeeqs5uhmbqy4hz4v3pihrfisiklcetisxkf63d2r473szaprwi", engine="zarr"
 )
 # %%
 colors = {
@@ -34,8 +32,8 @@ colors = {
     "west": "#00b4d8",
 }
 # %%
-wv, no_wv = od.open_wales(masked=False, local=True)
-wv = wv.assign(q=physics.wv2q(wv))
+no_wv = od.open_wales(masked=False, local=True)
+
 no_wv = no_wv.sel(time=slice(np.datetime64("2024-08-10"), np.datetime64("2024-09-29")))
 no_wv = xr.where(no_wv.bsrgl_flags == 8, 100, no_wv)
 no_wv = no_wv.where((no_wv.bsrgl_flags == 0) | (no_wv.bsrgl_flags == 8)).sortby(
@@ -64,6 +62,8 @@ segments = sorted(
     key=lambda s: s["start"],
 )
 # %%
+
+# %%
 lfrac = {}
 mfrac = {}
 hfrac = {}
@@ -76,6 +76,8 @@ for s in segments:
         ds.where((ds >= 4000) & (ds < 8000)).count(dim="time") / ds.sizes["time"]
     )
     hfrac[s["segment_id"]] = ds.where(ds >= 8000).count(dim="time") / ds.sizes["time"]
+# %%
+
 # %%
 lcircle = lev4.swap_dims({"circle": "circle_id"}).assign(
     low_frac=("circle_id", [lfrac[cid] for cid in lev4.circle_id.values]),
@@ -321,7 +323,7 @@ for name, cond in zip(
 """
 # %%
 
-cvar = "div"
+cvar = "omega"
 for cond, name in zip(
     [high_cond, mid_cond, low_cond | few_cond], ["high_frac", "mid_frac", "low_frac"]
 ):
@@ -337,10 +339,12 @@ for cond, name in zip(
         ds.ta_mean,
         bins=[np.arange(0, 1, 0.02), np.arange(210, 305, 1)],
     )
-    hs.to_zarr(f"/Users/helene/Documents/Data/{cvar}_" + name + ".zarr", mode="w")
+    hs.to_zarr(
+        f"/Users/helene/Documents/data/mlclouds/{cvar}_" + name + ".zarr", mode="w"
+    )
 # %%
 
-cvar = "div"
+cvar = "omega"
 tvar = "cttmean"
 variables = ["high_frac", "mid_frac", "low_frac"]
 kwargs = dict(
@@ -361,7 +365,9 @@ for idx, cond in enumerate([high_cond, mid_cond, (low_cond | few_cond)]):
     axes = axs[:, 1]
     var = variables[idx]
     ds = dspartial.where(cond, drop=True)
-    hs = xr.open_dataset(f"/Users/helene/Documents/Data/{cvar}_" + var + ".zarr")
+    hs = xr.open_dataset(
+        f"/Users/helene/Documents/data/mlclouds/{cvar}_" + var + ".zarr"
+    )
     p = hs["histogram_" + var + "_ta_mean"].plot(
         y="ta_mean_bin",
         cmap="cmo.balance",
@@ -386,7 +392,7 @@ for idx, (cond, lim) in enumerate(
     zip([high_cond, mid_cond, low_cond | few_cond], [None, 230, 230])
 ):
     for cvar, ls, label in zip(
-        ["div"],
+        ["omega"],
         ["-", "--", ":"],
         ["$\omega$", "$\omega_u$", "$\omega_v$"],
     ):
@@ -455,3 +461,55 @@ fig.savefig(
     f"/Users/helene/Documents/code/mid_level_clouds/plots/{cvar}_cloudtype.pdf", dpi=300
 )
 # fig.savefig("/scratch/m/m301046/omega_cloudtype.pdf")
+
+# %%
+sns.set_context("talk")
+fig, ax = plt.subplots()
+colors = ["#005555", "#7B9E9B", "#A8B041"]
+
+for idx, (cond, lim, label, color) in enumerate(
+    zip(
+        [high_cond, mid_cond, low_cond | few_cond],
+        [None, 230, 230],
+        ["high", "mid-level", "low"],
+        colors,
+    )
+):
+    cloudds = dspartial.where(cond, drop=True)
+    hs = (
+        (
+            histogram(
+                cloudds.ta_mean,
+                bins=[np.arange(210, 305, 1)],
+                weights=cloudds[cvar] * 60 * 60 / 100,
+            )
+            / histogram(
+                cloudds.ta_mean,
+                bins=[np.arange(210, 305, 1)],
+            )
+        )
+        .rolling(
+            ta_mean_bin=5,
+            center=True,
+        )
+        .mean()
+        .sel(ta_mean_bin=slice(lim, None))
+    )
+
+    hs.plot(
+        y="ta_mean_bin",
+        ax=ax,
+        linestyle=ls,
+        label=label,
+        alpha=alpha,  # label=label,
+        color=color,
+    )
+ax.legend()
+ax.set_ylabel("temperature / K")
+ax.set_xlabel("omega / hPa hr$^{-1}$")
+ax.axvline(0, color="grey", lw=0.5)
+ax.axhline(273.15, color="grey", lw=0.5)
+ax.invert_yaxis()
+sns.despine(offset=5)
+fig.tight_layout()
+fig.savefig("/Users/helene/Documents/scratch/omega_cloudtype.pdf", transparent=True)
