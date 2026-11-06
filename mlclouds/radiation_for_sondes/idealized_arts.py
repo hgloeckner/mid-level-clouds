@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# SBATCH --account=mh0066
-# SBATCH --partition=compute
-# SBATCH --time=08:00:00
-# SBATCH --array=0-10
+#SBATCH --account=mh0066
+#SBATCH --partition=compute
+#SBATCH --time=08:00:00
+#SBATCH --array=0-10
 
 import os
 import dask
@@ -22,7 +22,7 @@ import myutils.physics_helper as ph
 import time
 
 
-temp_type = "adiabat"
+temp_type = "real"
 exp_name = "beach"
 mean_day = np.datetime64("2024-09-01")
 mean_lat = 9
