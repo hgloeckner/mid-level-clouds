@@ -80,31 +80,89 @@ stats["time_idx"] = rdata["time"].values[stats["ti"]]
 ds = stats.set_index(["label", "step"])[
     ["cloud_top", "cloud_base", "time_idx"]
 ].to_xarray()
-
+# %%
 ds = ds.assign(
     cloud_depth=ds.cloud_top - ds.cloud_base,
 )
 # %%
-ds.to_zarr("/scratch/m/m301046/cloud_props_radar.zarr", mode="w")
 
 # %%
-ds = xr.open_dataset("/scratch/m/m301046/cloud_props_radar.zarr")
+
+
+l3ds = xr.open_dataset(
+    "ipfs://bafybeiczbv7mycr2jois6t4dq3zwiltycomwo5xxvjqcjz2ot3newzar6q", engine="zarr"
+)
+l3ds = l3ds.swap_dims({"sonde": "launch_time"}).sel(
+    launch_time=slice("2024-08-10", "2024-09-29")
+)
+
+# %%
+
+
+def to_hourly(f):
+    t = pd.date_range(
+        pd.Timestamp(f.launch_time.min().values).ceil("h"),
+        pd.Timestamp(f.launch_time.max().values),
+        freq="1h",
+    )
+    return (
+        f.reindex(launch_time=np.union1d(f.launch_time, t))
+        .interpolate_na(dim="launch_time", method="pchip")
+        .sel(launch_time=t)
+        .assign_coords(flight_id=f.flight_id.values[0])
+    )
+
+
+tads = (
+    l3ds.ta.interpolate_na(dim="altitude")
+    .rolling(altitude=50, center=True)
+    .mean()
+    .assign_coords(flight_id=l3ds.flight_id)
+    .groupby(l3ds.flight_id)
+    .map(to_hourly)
+)
+
 
 # %%
 ds = ds.assign(mean_time=ds.time_idx.groupby("label").mean("step"))
+ds = ds.assign(
+    mean_latitude=(
+        "label",
+        rdata.latitude.mean("altitude").sel(time=ds.mean_time, method="nearest").values,
+    ),
+    cloud_top_ta=(
+        ("label", "step"),
+        tads.reset_coords()
+        .ta.sel(
+            launch_time=ds.mean_time.broadcast_like(ds.time_idx),
+            altitude=ds.cloud_top.fillna(0),
+            method="nearest",
+        )
+        .values,
+    ),
+)
+
+# %%
+ds.to_zarr("/scratch/m/m301046/cloud_props_radar.zarr", mode="w")
+# %%
+ds = xr.open_dataset("/scratch/m/m301046/cloud_props_radar.zarr")
 
 # %%
 east = ds.where(ds.mean_time < np.datetime64("2024-09-05"), drop=True)
 west = ds.where(ds.mean_time > np.datetime64("2024-09-07"), drop=True)
 
-# %%
-
+north = east.where(east.mean_latitude > 13.5, drop=True)
+east = east.where(east.mean_latitude < 13.5, drop=True)
 
 # %%
 
 sns.set_context("talk")
 fig, axes = plt.subplots(ncols=2, figsize=(12, 6), sharey=True)
-for ds, label, color in [(east, "east", "#960018"), (west, "west", "#0085db")]:
+for ds, label, color in [
+    (east, "east", "#960018"),
+    (west, "west", "#0085db"),
+    (north, "north", "#FF7982"),
+]:
     top = histogram(
         ds.cloud_top,
         dim=["label", "step"],
@@ -132,3 +190,5 @@ for ax in axes:
 sns.despine()
 fig.tight_layout()
 fig.savefig("/scratch/m/m301046/cloud_top_hist.pdf")
+
+# %%
