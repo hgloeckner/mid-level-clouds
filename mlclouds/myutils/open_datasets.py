@@ -66,33 +66,20 @@ def get_cids():
 
 def open_wales(masked=True, local=False):
     if local:
-        folder = "/Users/helene/Documents/Data/"
+        folder = "/Users/helene/Documents/data/wales/"
     else:
         folder = "/work/mh0066/m301046/Data/wales/"
     if masked:
-        wv_path = f"{folder}wales_wv_masked.zarr"
         no_wv_path = f"{folder}wales_no_wv_masked.zarr"
     else:
-        wv_path = f"{folder}wales_wv.zarr"
         no_wv_path = f"{folder}wales_no_wv.zarr"
 
-    wv = xr.open_dataset(
-        wv_path,
-        engine="zarr",
-        chunks={},
-    )
     no_wv = xr.open_dataset(
         no_wv_path,
         engine="zarr",
         chunks={},
     )
-    return wv.rename(
-        {
-            "airtemperature": "ta",
-            "flight_altitude": "aircraft_msl_altitude",
-            "airdensity": "rho_air",
-        }
-    ), no_wv.rename(
+    return no_wv.rename(
         {
             "airtemperature": "ta",
             "flight_altitude": "aircraft_msl_altitude",
