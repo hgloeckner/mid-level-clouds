@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp",
     "bottleneck",
     "cartopy",
+    "certifi",
     "cmocean",
     "cython",
     "easygems",

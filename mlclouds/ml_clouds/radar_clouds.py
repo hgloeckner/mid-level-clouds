@@ -7,6 +7,33 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.ndimage as ndimage
 from xhistogram.xarray import histogram
+import os, certifi
+os.environ["SSL_CERT_FILE"] = certifi.where()  # set before opening the dataset
+
+scratch_path = "/scratch/m/m301046/"
+
+def get_labels_by_segment(rdata, max_gap, datavar="reflectivity"):
+    labels = np.full((rdata.sizes["time"], rdata.sizes["altitude"]), np.nan)
+    structure = ndimage.generate_binary_structure(2, 2)
+    gaps = np.diff(rdata.time) > max_gap
+    segments = np.concatenate(([0], np.cumsum(gaps)))
+    offset = 0
+    for id in np.unique(segments):
+        seg_data = rdata.isel(time=np.where(segments == id)[0])
+        lab, n = ndimage.label(
+            seg_data[datavar].interpolate_na("altitude", max_gap=90).notnull(),
+            structure=structure,
+        )
+        lab = np.where(lab > 0, lab + offset, np.nan)
+        idxs = np.where(segments == id)[0]
+        labels[idxs, :] = lab
+        offset = offset + n
+    return labels
+
+def mask_small_objects(seg, min_size):
+    sizes = np.bincount(np.nan_to_num(seg).astype(int).ravel())
+    valid_id = np.flatnonzero(sizes > min_size)
+    return np.where(np.isin(seg, valid_id), seg, np.nan)
 
 
 # %%
@@ -25,67 +52,54 @@ rdata = (
     .sortby("altitude")
     .sel(altitude=slice(200, None))
 )
-rdata = rdata.where(rdata.snr_db > -17)
+#rdata = rdata.where(rdata.snr_db > -17)
+#%%
 
-
-# %%
-def get_labels_by_segment(rdata, max_gap):
-    labels = np.full((rdata.sizes["time"], rdata.sizes["altitude"]), np.nan)
-    structure = ndimage.generate_binary_structure(2, 2)
-    gaps = np.diff(rdata.time) > max_gap
-    segments = np.concatenate(([0], np.cumsum(gaps)))
-    offset = 0
-    for id in np.unique(segments):
-        seg_data = rdata.isel(time=np.where(segments == id)[0])
-        lab, n = ndimage.label(
-            seg_data.reflectivity.interpolate_na("altitude", max_gap=90).notnull(),
-            structure=structure,
-        )
-        lab = np.where(lab > 0, lab + offset, np.nan)
-        idxs = np.where(segments == id)[0]
-        labels[idxs, :] = lab
-        offset = offset + n
-    return labels
-
-
-seg = get_labels_by_segment(rdata, np.timedelta64(5, "m"))
-
-
-# %%
-def mask_small_objects(seg, min_size):
-    sizes = np.bincount(np.nan_to_num(seg).astype(int).ravel())
-    valid_id = np.flatnonzero(sizes > min_size)
-    return np.where(np.isin(seg, valid_id), seg, np.nan)
-
-
-sizes = mask_small_objects(seg, 3)
-# %%
-ti, ai = np.nonzero(~np.isnan(seg))
-df = pd.DataFrame(
-    {
-        "label": seg[ti, ai].astype(int),
-        "ti": ti,
-        "altitude": rdata.altitude.values[ai],
-    }
+wales = (
+    xr.open_dataset(
+        "https://swift.dkrz.de/v1/dkrz_41caca03ec414c2f95f52b23b775134f/wales/wales_no_wv.zarr",
+        chunks={}
+    )
+    .sel(time=slice(np.datetime64("2024-08-11"), np.datetime64("2024-09-29")))
+    .sel(altitude=slice(1000, None))
 )
 
-stats = (
-    df.groupby(["label", "ti"])["altitude"]
-    .agg(cloud_base="min", cloud_top="max")
-    .reset_index()
-)
-stats["step"] = stats["ti"] - stats.groupby("label")["ti"].transform("min")
-stats["time_idx"] = rdata["time"].values[stats["ti"]]
-
-ds = stats.set_index(["label", "step"])[
-    ["cloud_top", "cloud_base", "time_idx"]
-].to_xarray()
+wales=wales.where(((wales.bsrgl_flags==0) & (wales.bsrgl >= 20)) | (wales.bsrgl_flags==8))
+#%%
+walesseg = get_labels_by_segment(wales.chunk({"altitude":-1}), np.timedelta64(5, "m"), datavar="bsrgl")
+walesbig = mask_small_objects(walesseg, 3)
 # %%
-ds = ds.assign(
-    cloud_depth=ds.cloud_top - ds.cloud_base,
-)
+radarseg = get_labels_by_segment(rdata, np.timedelta64(5, "m"))
+radarbig = mask_small_objects(radarseg, 3)
 # %%
+def get_cloud_stats(seg, timeds):
+    ti, ai = np.nonzero(~np.isnan(seg))
+    df = pd.DataFrame(
+        {
+            "label": seg[ti, ai].astype(int),
+            "ti": ti,
+            "altitude": timeds.altitude.values[ai],
+        }
+    )
 
+    stats = (
+        df.groupby(["label", "ti"])["altitude"]
+        .agg(cloud_base="min", cloud_top="max")
+        .reset_index()
+    )
+    stats["step"] = stats["ti"] - stats.groupby("label")["ti"].transform("min")
+    stats["time_idx"] = timeds["time"].values[stats["ti"]]
+
+    ds = stats.set_index(["label", "step"])[
+        ["cloud_top", "cloud_base", "time_idx"]
+    ].to_xarray()
+    ds = ds.assign(
+        cloud_depth=ds.cloud_top - ds.cloud_base,
+    )
+    return stats, ds
+
+radarstats, radarprops = get_cloud_stats(radarbig, rdata)
+walesstats, walesprops = get_cloud_stats(walesbig, wales)
 # %%
 
 
