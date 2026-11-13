@@ -116,13 +116,13 @@ for stats in [("radar", radarstats), ("wales", walesstats)]:
     maxct[stats[0]] = stats[1].groupby("time_idx")["cloud_top"].max().to_xarray()
 
 # %%
-bins = np.linspace(0, 15000, 100)
+altbins = np.linspace(0, 15000, 100)
 hists = {}
 for key in maxct.keys():
     hists[key] = histogram(
         maxct[key],
         dim=["time_idx"],
-        bins=bins,
+        bins=altbins,
     ).load()
 
 # %%
@@ -174,11 +174,11 @@ cbar = fig.colorbar(im, cax=cax, orientation="vertical")
 cbar.ax.set_yticks(bounds, labels=[int(bound / 1000) for bound in bounds], fontsize=10)
 cbar.ax.set_ylabel("cloud top / km", fontsize=10, labelpad=1)
 
-altbins = np.linspace(0, 15, 100)
+altbinskm = np.linspace(0, 15, 100)
 cnts, values, bars = rect_ax.hist(
     maxct["radar"] / 1000,
     orientation="horizontal",
-    bins=altbins,
+    bins=altbinskm,
     density=True,
 )
 
@@ -278,8 +278,6 @@ ds = ds.assign(
     ),
 )
 
-# %%
-ds = radarprops
 
 # %%
 east = ds.where(ds.mean_time < np.datetime64("2024-09-05"), drop=True)
@@ -380,3 +378,80 @@ sns.despine()
 fig.tight_layout()
 #
 # fig.savefig("/Users/helene/Documents/scratch/cloud_top_hist.pdf")
+# %%
+
+all_radar = histogram(
+    radarprops.cloud_top,
+    dim=["label", "step"],
+    bins=altbins,
+    block_size=1,
+)
+
+sns.set_palette("Paired")
+fig, axes = plt.subplots(ncols=2, sharey=True, width_ratios=[1.5, 1])
+all_radar.plot(y="cloud_top_bin", ax=axes[0], label="all radar")
+hists["radar"].plot(y="cloud_top_bin", ax=axes[0], label="max cloud top")
+
+(hists["radar"] / all_radar).plot(
+    y="cloud_top_bin", ax=axes[1], label="ratio", color="k"
+)
+
+axes[0].legend()
+axes[0].set_xlabel("count")
+
+axes[0].set_ylabel("cloud top / km")
+axes[1].set_ylabel("")
+axes[1].set_xlabel("ratio")
+sns.despine()
+
+
+# %%
+spectimes = np.unique(specmacs.time)
+specradar = (
+    maxct["radar"]
+    .reindex(time_idx=spectimes, method="nearest", tolerance=np.timedelta64(1, "s"))
+    .dropna("time_idx")
+)
+specwales = (
+    maxct["wales"]
+    .reindex(time_idx=spectimes, method="nearest", tolerance=np.timedelta64(1, "s"))
+    .dropna("time_idx")
+)
+# %%
+
+t = specmacs.indexes["time"]
+m = specradar.indexes["time_idx"]
+start = t.searchsorted(m, side="left")
+stop = t.searchsorted(m, side="right")
+
+new_block = np.r_[True, start[1:] != stop[:-1]]
+bstart = start[new_block]
+bstop = stop[np.r_[new_block[1:], True]]
+
+specsel = xr.concat(
+    [specmacs.isel(time=slice(a, b)) for a, b in zip(bstart, bstop)], dim="time"
+)
+
+# %%
+sns.set_palette("Paired")
+fig, ax = plt.subplots()
+
+
+for pltds, label in [
+    (specradar, "reduced radar"),
+    (maxct["radar"], "full radar"),
+    (specsel, "reduced specmacs"),
+    (specmacs, "full specmacs"),
+    (specwales, "reduced wales"),
+    (maxct["wales"], "full wales"),
+]:
+    ax.hist(
+        pltds.values / 1000,
+        bins=np.linspace(0, 15, 50),
+        density=True,
+        histtype="step",
+        orientation="horizontal",
+        label=label,
+    )
+ax.legend()
+sns.despine()
