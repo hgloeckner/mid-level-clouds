@@ -5,7 +5,7 @@ import seaborn as sns
 import myutils.physics_helper as ph
 import matplotlib.lines as mlines
 
-levante = True
+levante = False
 if levante:
     datapath = "/work/mh0066/m301046/data/mlclouds/"
     scratchpath = "/scratch/m/m301046/"
@@ -314,7 +314,7 @@ fig.savefig(scratchpath + "csc_cshape.pdf")
 # %%
 cw = 8.27
 sns.set_context("talk")
-fig, ax = plt.subplots()
+fig, axes = plt.subplots(ncols=3, figsize=(12, 5))
 """
 """
 for sonde, ls, label, alpha, color in [
@@ -323,7 +323,7 @@ for sonde, ls, label, alpha, color in [
     ("elow", ":", "E-shape", 0.5, "#005652"),
 ]:
     ds = arts["adiabat"].sel(sonde=sonde, altitude=slice(0, 15000))
-    ax.plot(
+    axes[0].plot(
         ds.rh * 100,
         ds.ta,
         ls=ls,
@@ -331,13 +331,50 @@ for sonde, ls, label, alpha, color in [
         alpha=alpha,
         c=color,
     )
-ax.set_ylabel("temperature / K")
-ax.set_xlabel("relative humidity / %")
-ax.invert_yaxis()
-ax.set_ylim(305, 210)
-ax.set_xlim(30, 90)
-ax.legend()
+axes[0].set_ylabel("$T$ / K")
+axes[0].set_xlabel("RH / %")
+axes[0].invert_yaxis()
+axes[0].set_ylim(300, 210)
+axes[0].set_xlim(30, 90)
+axes[0].legend()
+
+for key, alpha in [("adiabat", 0.5), ("real", 1)]:
+    axes[1].plot(
+        cscarts[key].stab.mean("sonde") * 1000,
+        cscarts[key].ta.mean("sonde"),
+        label=key,
+        color="#0B257A",
+        alpha=alpha,
+    )
+
+axes[1].set_xlabel("$\sigma$ / K km$^{-1}$")
+axes[1].legend()
+axes[1].set_ylim(300, 210)
+
+htgrs = [
+    ("", "#005652", "real", "clow", "-", "C-shape, real $T$", 1),
+    ("", "#005652", "adiabat", "elow", ":", "E-shape, adiabat", 0.5),
+    ("", "#005652", "adiabat", "clow", "-", "C-shape, adiabat", 0.5),
+    ("_lw", "k", "adiabat", "clow", "-", "C-shape, adiabat, LW", 0.5),
+]
+
+for htgr, color, key, sonde, ls, label, alpha in htgrs:
+    ds = arts[key].sel(sonde=sonde, altitude=slice(0, 15000))
+    axes[2].plot(
+        ds[f"htgr{htgr}"] * 60 * 60 * 24,
+        ds.ta,
+        ls=ls,
+        color=color,
+        label=label,
+        alpha=alpha,
+    )
+
+axes[2].set_xlabel("$\mathcal{H}$ / K day$^{-1}$")
+axes[2].set_ylim(300, 210)
+axes[2].set_xlim(-2.7, -0.7)
+axes[2].legend()
 sns.despine(offset=10)
+
 fig.tight_layout()
 fig.savefig(scratchpath + "rh_title.pdf")
 # %%
