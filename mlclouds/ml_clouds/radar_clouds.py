@@ -12,6 +12,7 @@ import os, certifi
 os.environ["SSL_CERT_FILE"] = certifi.where()  # set before opening the dataset
 
 scratch_path = "/scratch/m/m301046/"
+scratch_path = "/Users/helene/Documents/scratch/"
 
 
 def get_labels_by_segment(rdata, max_gap, datavar="reflectivity"):
@@ -64,7 +65,7 @@ wales = (
         chunks={},
     )
     .sel(time=slice(np.datetime64("2024-08-11"), np.datetime64("2024-09-29")))
-    .sel(altitude=slice(1000, None))
+    .sel(altitude=slice(200, None))
 )
 
 wales = wales.where(
@@ -134,13 +135,39 @@ specmacs = xr.open_dataset(
 hists["specmacs"] = histogram(
     specmacs,
     dim=["time"],
-    bins=bins,
+    bins=altbins,
     block_size=10,
 ).load()
-# %%
-
 
 # %%
+hists["specmacs"] = (
+    hists["specmacs"]
+    .assign_coords(altitude=hists["specmacs"].height_above_geoid_bin / 1000)
+    .swap_dims({"height_above_geoid_bin": "altitude"})
+)
+hists["wales"] = (
+    hists["wales"]
+    .assign_coords(altitude=hists["wales"].cloud_top_bin / 1000)
+    .swap_dims({"cloud_top_bin": "altitude"})
+)
+
+# %%
+
+border = 8
+
+scale_factor = (
+    hists["specmacs"].sel(altitude=slice(1, border)).sum()
+    / hists["wales"].sel(altitude=slice(0, border)).sum()
+).values
+hists["mod_specmacs"] = xr.concat(
+    [
+        hists["specmacs"].sel(altitude=slice(0, border)).reset_coords(drop=True),
+        hists["wales"].sel(altitude=slice(border, None)).reset_coords(drop=True)
+        * scale_factor,
+    ],
+    dim="altitude",
+)
+
 
 # %%
 import cartopy.crs as ccrs
@@ -175,27 +202,26 @@ cbar.ax.set_yticks(bounds, labels=[int(bound / 1000) for bound in bounds], fonts
 cbar.ax.set_ylabel("cloud top / km", fontsize=10, labelpad=1)
 
 altbinskm = np.linspace(0, 15, 100)
+
 cnts, values, bars = rect_ax.hist(
     maxct["radar"] / 1000,
     orientation="horizontal",
     bins=altbinskm,
     density=True,
 )
-
 for cnt, value, bar in zip(cnts, values, bars):
     bar.set_facecolor(cmap(norm(value * 1000), alpha=0.5))
-normed_spec = (
-    hists["specmacs"] / (hists["specmacs"].sum() * np.diff(altbins)[0])
-).assign_coords(altitude=hists["specmacs"].height_above_geoid_bin / 1000)
-normed_wales = (
-    hists["wales"] / (hists["wales"].sum() * np.diff(altbins)[0])
-).assign_coords(altitude=hists["wales"].cloud_top_bin / 1000)
-for idx in range(len(bounds) - 1):
-    for hist, label, ls in [
-        (normed_spec, "specMACS", "-"),
-        (normed_wales, "Wales", ":"),
+
+for idx in range(len(bounds) - 2):
+    for key, label, ls in [
+        ("specmacs", "specMACS", "-"),
+        ("wales", "Wales", ":"),
+        ("mod_specmacs", "mod specMACS", "--"),
     ]:
-        (hist.sel(altitude=slice(bounds[idx] / 1000, bounds[idx + 1] / 1000))).plot(
+        normed_hist = hists[key] / (hists[key].sum() * np.diff(altbinskm)[0])
+        (
+            normed_hist.sel(altitude=slice(bounds[idx] / 1000, bounds[idx + 1] / 1000))
+        ).plot(
             ax=rect_ax,
             y="altitude",
             color=cmap(norm((bounds[idx] + bounds[idx + 1]) / 2)),
@@ -210,18 +236,19 @@ rect_ax.set_xlabel("pdf")
 
 
 handles = [
-    mpl.lines.Line2D([], [], color=cmap(5), ls="-", lw=1, label="specMACS"),
     mpl.lines.Line2D([], [], color=cmap(5), ls=":", lw=1, label="WALES"),
+    mpl.lines.Line2D([], [], color=cmap(5), ls="-", lw=1, label="specMACS"),
+    mpl.lines.Line2D([], [], color=cmap(5), ls="--", lw=1, label="specMACS (mod)"),
     mpl.patches.Patch(color=cmap(5), label="radar"),
 ]
-rect_ax.legend(handles=handles)
+rect_ax.legend(handles=handles, fontsize=7)
 
 
 sns.despine(ax=rect_ax)
 fig.tight_layout()
 plt.show()
 
-fig.savefig(scratch_path + "/cloud_top_map.pdf")
+fig.savefig(scratch_path + "cloud_top_map.pdf", dpi=300)
 
 
 # %%
@@ -454,4 +481,42 @@ for pltds, label in [
         label=label,
     )
 ax.legend()
+sns.despine()
+# %%
+velox = xr.open_dataset(
+    "ipfs://bafybeihwsmivzu2lb6u7mzb64ux2egrtob66aklbvocvqr7nrn3apsfeo4", engine="zarr"
+)
+
+# %%
+
+fig, axes = plt.subplots(nrows=3, figsize=(24, 12))
+
+im = rdata.sel(
+    time=slice("2024-09-03T15:10:00", "2024-09-03T15:20:00")
+).reflectivity.plot(y="altitude", add_colorbar=False, ax=axes[0], rasterized=True)
+
+# fig.colorbar(im,ax=axes[0], label="reflectivity / dBZ")
+im = wales.sel(time=slice("2024-09-03T15:10:00", "2024-09-03T15:20:00")).bsrgl.plot(
+    y="altitude", add_colorbar=False, ax=axes[1], rasterized=True, vmin=0, vmax=200
+)
+
+# fig.colorbar(im,ax=axes[1], extend="max")
+
+axes[2].plot(
+    velox.sel(time=slice("2024-09-03T15:10:00", "2024-09-03T15:20:00")).time,
+    velox.sel(time=slice("2024-09-03T15:10:00", "2024-09-03T15:20:00")).BT_center,
+    label="VELOX center",
+)
+axes[2].set_ylabel("VELOX center BT / K")
+axes[2].set_xlim(
+    np.datetime64("2024-09-03T15:10:00"), np.datetime64("2024-09-03T15:20:00")
+)
+axes[2].set_xlabel("time")
+axes[2].axhline(0, color="k", ls="-", lw=0.5)
+
+for ax in axes[:-1]:
+    ax.set_ylabel("altitude / m")
+    ax.set_ylim(3000, 10000)
+
+fig.tight_layout()
 sns.despine()
