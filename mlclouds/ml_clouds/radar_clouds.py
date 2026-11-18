@@ -433,15 +433,13 @@ fig.tight_layout()
 
 # %%
 
-bins = np.linspace(200, 300, 50)  # np.linspace(0, 15000, 50)
-ctvar = "cloud_top_ta"
 
 sns.set_context("talk")
 fig, axes = plt.subplots(ncols=2, figsize=(12, 6), sharey=True)
 for pltds, label, color in [
-    (east, "east", "#960018"),
-    (west, "west", "#0085db"),
     (north, "north", "#FF7982"),
+    (west, "west", "#0085db"),
+    (east, "east", "#960018"),
 ]:
     top = histogram(
         pltds[ctvar],
@@ -455,12 +453,20 @@ for pltds, label, color in [
         bins=bins,
         block_size=1,
     )
-    (top / top.sum(f"{ctvar}_bin")).plot(
-        ax=axes[0], label=label, y=f"{ctvar}_bin", color=color
+    axes[0].stairs(
+        (top / top.sum(f"{ctvar}_bin")),
+        edges=bins,
+        orientation="horizontal",
+        color=color,
+        label=label,
     )
-    (lowtop / lowtop.sum(f"{ctvar}_bin")).plot(
-        ax=axes[1], label=label, y=f"{ctvar}_bin", color=color
+    axes[1].stairs(
+        (lowtop / lowtop.sum(f"{ctvar}_bin")),
+        edges=bins,
+        orientation="horizontal",
+        color=color,
     )
+
 
 axes[0].legend()
 # axes[0].set_xlim(0, 15000)
