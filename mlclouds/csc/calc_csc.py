@@ -4,6 +4,20 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import myutils.physics_helper as ph
 import matplotlib.lines as mlines
+import moist_thermodynamics.constants as mtc
+import orcestra
+import numpy as np
+
+# %%
+
+
+def calc_stability(ds, ta_var="ta", qvar="q"):
+    ds = ds.assign(
+        stab=ph.get_stability(ds.theta, ds[ta_var]),
+        rho=ph.density_from_q(ds.p, ds[ta_var], ds[qvar]),
+    )
+    return ds
+
 
 levante = False
 if levante:
@@ -44,7 +58,9 @@ arts = {
     )
     for key, ds in arts.items()
 }
-arts["real"] = (
+
+arts = {key: calc_stability(ds) for key, ds in arts.items()}
+arts["realroll"] = (
     arts["real"]
     .drop_vars(["interpolated_time"])
     .rolling(altitude=20, center=True)
@@ -53,11 +69,9 @@ arts["real"] = (
 
 
 # %%
+
+
 def calc_cs_convergence(ds, ta_var="ta", qvar="q"):
-    ds = ds.assign(
-        stab=ph.get_stability(ds.theta, ds[ta_var]),
-        rho=ph.density_from_q(ds.p, ds[ta_var], ds[qvar]),
-    )
     for htgr in [
         (ds.htgr, ""),
         (ds.htgr_lw, "_lw"),
