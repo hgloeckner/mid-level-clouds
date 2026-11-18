@@ -104,6 +104,10 @@ def vmr2specific_humidity(x):
 
 
 def mass_flux(rho, stability, H):
+    # stability: K/m
+    # H: K/s
+    # rho: kg/m3
+    # return: kg/m2/s
     return rho * H / (stability)
 
 
