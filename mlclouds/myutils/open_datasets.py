@@ -2,6 +2,7 @@ import xarray as xr
 import numpy as np
 import hashlib
 import intake
+from myutils import data_helper as dh
 # from zarr.codecs import BloscCodec
 
 
@@ -16,7 +17,11 @@ def hash_xr_var(da):
 
 def open_dropsondes(cid):
     ds = xr.open_dataset(f"ipfs://{cid}", engine="zarr")
-    return ds.reset_coords(["launch_altitude"])
+    return (
+        ds.reset_coords(["launch_altitude"])
+        .pipe(dh.interpolate_gaps)
+        .pipe(dh.extrapolate_sfc)
+    )
 
 
 def open_radiosondes(cid):
