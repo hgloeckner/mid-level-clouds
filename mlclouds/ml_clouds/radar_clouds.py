@@ -174,91 +174,8 @@ hists["mod_specmacs"] = xr.concat(
     ],
     dim="altitude",
 )
-
-
 # %%
-import cartopy.crs as ccrs
-import cartopy.feature as cf
-import matplotlib as mpl
 
-cmap = mpl.colors.ListedColormap(["#D3D3D3", "#D8782F", "#982B00", "#474747"])
-bounds = [0, 4000, 6000, 8000, 15000]
-norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-sns.set_context("paper")
-cw = 8.3
-fig = plt.figure(figsize=(cw, 0.5 * cw))
-
-map_ax = fig.add_subplot(projection=ccrs.PlateCarree())
-map_ax.set_extent([-63, -15, 0, 22])
-rect_ax = map_ax.inset_axes([1.1, 0, 0.3, 1])
-"""
-"""
-im = map_ax.scatter(
-    rdata.longitude.sel(time=maxct["radar"].time_idx),
-    rdata.latitude.sel(time=maxct["radar"].time_idx),
-    c=maxct["radar"],
-    s=1e-3,
-    cmap=cmap,
-    norm=norm,
-    rasterized=True,
-    transform=ccrs.PlateCarree(),
-)
-cax = map_ax.inset_axes([0.88, 0.05, 0.02, 0.4])
-cbar = fig.colorbar(im, cax=cax, orientation="vertical")
-cbar.ax.set_yticks(bounds, labels=[int(bound / 1000) for bound in bounds], fontsize=10)
-cbar.ax.set_ylabel("cloud top / km", fontsize=10, labelpad=1)
-
-altbinskm = np.linspace(0, 15, 100)
-
-cnts, values, bars = rect_ax.hist(
-    maxct["radar"] / 1000,
-    orientation="horizontal",
-    bins=altbinskm,
-    density=True,
-)
-for cnt, value, bar in zip(cnts, values, bars):
-    bar.set_facecolor(cmap(norm(value * 1000), alpha=0.5))
-
-for idx in range(len(bounds) - 2):
-    for key, label, ls in [
-        ("specmacs", "specMACS", "-"),
-        ("wales", "Wales", ":"),
-        ("mod_specmacs", "mod specMACS", "--"),
-    ]:
-        normed_hist = hists[key] / (hists[key].sum() * np.diff(altbinskm)[0])
-        (
-            normed_hist.sel(altitude=slice(bounds[idx] / 1000, bounds[idx + 1] / 1000))
-        ).plot(
-            ax=rect_ax,
-            y="altitude",
-            color=cmap(norm((bounds[idx] + bounds[idx + 1]) / 2)),
-            lw=1,
-            ls=ls,
-            label=label,
-        )
-rect_ax.set_ylabel("cloud top / km", fontsize=10, labelpad=-2)
-map_ax.coastlines()
-rect_ax.set_xlim(0, 0.4)
-rect_ax.set_xlabel("pdf")
-
-
-handles = [
-    mpl.lines.Line2D([], [], color=cmap(5), ls=":", lw=1, label="WALES"),
-    mpl.lines.Line2D([], [], color=cmap(5), ls="-", lw=1, label="specMACS"),
-    mpl.lines.Line2D([], [], color=cmap(5), ls="--", lw=1, label="specMACS (mod)"),
-    mpl.patches.Patch(color=cmap(5), label="radar"),
-]
-rect_ax.legend(handles=handles, fontsize=7)
-
-
-sns.despine(ax=rect_ax)
-fig.tight_layout()
-plt.show()
-
-fig.savefig(scratch_path + "cloud_top_map.pdf", dpi=300)
-
-
-# %%
 l3ds = xr.open_dataset(
     "ipfs://bafybeiczbv7mycr2jois6t4dq3zwiltycomwo5xxvjqcjz2ot3newzar6q", engine="zarr"
 )
@@ -298,7 +215,7 @@ ds = radarprops.assign(mean_time=radarprops.time_idx.groupby("label").mean("step
 ds = ds.assign(
     mean_latitude=(
         "label",
-        rdata.latitude.sel(time=ds.mean_time, method="nearest").values,
+        rdata.lat.sel(time=ds.mean_time, method="nearest").values,
     ),
     cloud_top_ta=(
         ("label", "step"),
@@ -320,6 +237,158 @@ west = ds.where(ds.mean_time > np.datetime64("2024-09-07"), drop=True)
 north = east.where(east.mean_latitude > 13.5, drop=True)
 east = east.where(east.mean_latitude < 13.5, drop=True)
 
+
+# %%
+import cartopy.crs as ccrs
+import cartopy.feature as cf
+import matplotlib as mpl
+import myutils.data_helper as dh
+
+cmap = mpl.colors.ListedColormap(["#D3D3D3", "#D8782F", "#982B00", "#474747"])
+bounds = [0, 4000, 6000, 8000, 15000]
+norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+bins = np.linspace(200, 300, 50)  # np.linspace(0, 15000, 50)
+ctvar = "cloud_top_ta"
+
+sns.set_context("paper")
+cw = 8.3
+fig = plt.figure(figsize=(cw, cw), layout="constrained")
+gs = fig.add_gridspec(2, 2, width_ratios=[1, 0.4])
+
+map_ax = fig.add_subplot(gs[0, 0], projection=ccrs.PlateCarree())
+map_ax.set_extent([-63, -15, 0, 22])
+rect_ax = fig.add_subplot(gs[0, 1])
+
+bottom = gs[1, :].subgridspec(1, 2)
+ax_left = fig.add_subplot(bottom[0])
+ax_right = fig.add_subplot(bottom[1])
+"""
+"""
+im = map_ax.scatter(
+    rdata.lon.sel(time=maxct["radar"].time_idx),
+    rdata.lat.sel(time=maxct["radar"].time_idx),
+    c=maxct["radar"],
+    s=1e-3,
+    cmap=cmap,
+    norm=norm,
+    rasterized=True,
+    transform=ccrs.PlateCarree(),
+)
+cax = map_ax.inset_axes([0.88, 0.05, 0.02, 0.4])
+cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+cbar.ax.set_yticks(bounds, labels=[int(bound / 1000) for bound in bounds], fontsize=10)
+cbar.ax.set_ylabel("cloud top / km", fontsize=10, labelpad=1)
+mapxticks = []
+mapyticks = []
+for region, label, xy in [
+    (dh.east, "East", (-35.5, 12)),
+    (dh.west, "West", (-45, 6.5)),
+    (dh.north, "North", (-20, 17)),
+]:
+    map_ax.plot(region[:2, 0], region[:2, 1], color="k", lw=1, ls="solid")
+    map_ax.plot(region[2:, 0], region[2:, 1], color="k", lw=1, ls="solid")
+    map_ax.annotate(f"{label}", xy=xy, fontsize=8)
+    mapxticks.append(region[:2, 0])
+    mapyticks.append(region[1:-1, 1])
+map_ax.set_xticks(np.concatenate(mapxticks))
+map_ax.set_yticks(np.unique(np.concatenate(mapyticks)))
+map_ax.set_xlabel("longitude / °E", fontsize=10)
+map_ax.set_ylabel("latitude / °N", fontsize=10)
+altbinskm = np.linspace(0, 15, 100)
+
+cnts, values, bars = rect_ax.hist(
+    maxct["radar"] / 1000,
+    orientation="horizontal",
+    bins=altbinskm,
+    density=True,
+)
+for cnt, value, bar in zip(cnts, values, bars):
+    bar.set_facecolor(cmap(norm(value * 1000), alpha=0.5))
+
+for idx in range(len(bounds) - 1):
+    for key, label, ls in [
+        ("specmacs", "specMACS", "-"),
+        ("wales", "Wales", ":"),
+        ("mod_specmacs", "mod specMACS", "--"),
+    ]:
+        normed_hist = hists[key] / (hists[key].sum() * np.diff(altbinskm)[0])
+        (
+            normed_hist.sel(altitude=slice(bounds[idx] / 1000, bounds[idx + 1] / 1000))
+        ).plot(
+            ax=rect_ax,
+            y="altitude",
+            color=cmap(norm((bounds[idx] + bounds[idx + 1]) / 2)),
+            lw=1,
+            ls=ls,
+            label=label,
+        )
+rect_ax.set_ylabel("cloud top / km", fontsize=10, labelpad=-2)
+map_ax.coastlines()
+rect_ax.set_xlim(0, 0.4)
+rect_ax.set_xlabel("pdf")
+
+
+handles = [
+    mpl.lines.Line2D([], [], color=cmap(5), ls=":", lw=1, label="WALES"),
+    mpl.lines.Line2D([], [], color=cmap(5), ls="-", lw=1, label="specMACS"),
+    mpl.lines.Line2D([], [], color=cmap(5), ls="--", lw=1, label="specMACS (mod)"),
+    mpl.patches.Patch(color=cmap(5), label="radar"),
+]
+rect_ax.legend(handles=handles, fontsize=7)
+
+
+# lower plot
+for pltds, label, color in [
+    (north, "north", "#FF7982"),
+    (west, "west", "#0085db"),
+    (east, "east", "#960018"),
+]:
+    top = histogram(
+        pltds[ctvar],
+        dim=["label", "step"],
+        bins=bins,
+        block_size=1,
+    )
+    lowtop = histogram(
+        pltds.where(pltds.cloud_base < 1500)[ctvar],
+        dim=["label", "step"],
+        bins=bins,
+        block_size=1,
+    )
+    ax_left.stairs(
+        (top / top.sum(f"{ctvar}_bin")),
+        edges=bins,
+        orientation="horizontal",
+        color=color,
+        label=label,
+    )
+    ax_right.stairs(
+        (lowtop / lowtop.sum(f"{ctvar}_bin")),
+        edges=bins,
+        orientation="horizontal",
+        color=color,
+    )
+
+
+for ax, title in [(ax_left, "all clouds"), (ax_right, "cloud base below 1500 m")]:
+    ax.axhline(273.15, color="k", ls="-", lw=0.5)
+    ax.set_xlabel("normalized count")
+    ax.set_title(title)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 0.1)
+ax_left.set_ylabel("$T$ / K")
+ax_left.legend()
+for ax in [ax_left, ax_right, rect_ax]:
+    sns.despine(ax=ax)
+
+fig.tight_layout()
+plt.show()
+
+fig.savefig(scratch_path + "cloud_top_map.pdf", dpi=300)
+
+
+# %%
 # %%
 
 sns.set_context("talk")
