@@ -42,19 +42,24 @@ def mask_small_objects(seg, min_size):
 
 # %%
 rdata = xr.open_dataset(
-    "ipfs://bafybeifxtmq5mpn7vwiiwl4vlpoil7rgm2tnhmkeyqsyudleqegxzvwl3a",
+    # "ipfs://bafybeifxtmq5mpn7vwiiwl4vlpoil7rgm2tnhmkeyqsyudleqegxzvwl3a",
+    "ipfs://bafybeigmd3dovwm45ylfqxnn2jphsrdjl2jt3dfytv7grkyhleaq42jthe",
     engine="zarr",
-    chunks={"altitude": -1},
-)
+).rename({"height": "altitude"})
 
+
+# %%
+reflectivity_var = "Zg"
+# radar_reflectivity
 rdata = (
     rdata.assign(
-        reflectivity=(10 * np.log10(rdata.radar_reflectivity)),
-        snr_db=10 * np.log10(rdata.radar_signal_to_noise),
+        reflectivity=(10 * np.log10(rdata[reflectivity_var])),
+        # snr_db=10 * np.log10(rdata.radar_signal_to_noise),
     )
     .sel(time=slice(np.datetime64("2024-08-11"), np.datetime64("2024-09-29")))
     .sortby("altitude")
     .sel(altitude=slice(200, None))
+    .chunk({"altitude": -1})
 )
 # rdata = rdata.where(rdata.snr_db > -17)
 # %%
@@ -115,6 +120,8 @@ walesstats, walesprops = get_cloud_stats(walesbig, wales)
 maxct = {}
 for stats in [("radar", radarstats), ("wales", walesstats)]:
     maxct[stats[0]] = stats[1].groupby("time_idx")["cloud_top"].max().to_xarray()
+# %%
+# maxct["radar"].to_netcdf(scratch_path + "radar_max_cloud_top.nc")
 
 # %%
 altbins = np.linspace(0, 15000, 100)
